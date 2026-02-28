@@ -1,9 +1,32 @@
+# ui_components.py
 import streamlit as st
 import calendar
 import plotly.graph_objects as go
 from datetime import datetime
+import knowledge_center as kc
+
+def show_static_documentation():
+    """Renders the 3-tab system manual."""
+    st.title("📖 Comprehensive System Manual")
+    tab1, tab2, tab3 = st.tabs(["📊 KPI Definitions", "🧠 Model Mechanics", "🛠️ Module Overview"])
+
+    with tab1:
+        st.subheader("Key Performance Indicators (KPIs)")
+        st.markdown(f"**1. Gross Demand**: {kc.KPI_DEFINITIONS['Gross Demand']}")
+        st.write(f"**2. Return Rate (%)**")
+        st.write(f"- Formula: {kc.KPI_DEFINITIONS['Return Rate']['Formula']}")
+        # ... (rest of your documentation logic)
+
+    with tab2:
+        st.subheader("Algorithmic Logic")
+        # ... (rest of your model logic)
+
+    with tab3:
+        st.subheader("Module Functionality")
+        # ... (rest of your module logic)
 
 def render_festival_calendar(f_name, f_date_str):
+    """Generates the interactive Heatmap for the Tuning Tab."""
     f_date = datetime.strptime(f_date_str, "%Y-%m-%d")
     year, month = f_date.year, f_date.month
     cal_grid = calendar.monthcalendar(year, month)
@@ -15,14 +38,15 @@ def render_festival_calendar(f_name, f_date_str):
             if day == 0:
                 z_week.append(0); t_week.append("")
             else:
-                if day == f_date.day: z_week.append(2) # Peak Green
-                elif abs(day - f_date.day) <= 2: z_week.append(1) # Window Orange
-                else: z_week.append(0.2) # Normal Dark
+                if day == f_date.day: z_week.append(2)      # Green (Peak)
+                elif abs(day - f_date.day) <= 2: z_week.append(1) # Orange (Window)
+                else: z_week.append(0.2)                    # Dark Grey (Normal)
                 t_week.append(str(day))
         z_data.append(z_week); text_data.append(t_week)
 
     fig = go.Figure(data=go.Heatmap(
-        z=z_data, x=['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+        z=z_data, 
+        x=['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
         colorscale=[[0, "#1e1e1e"], [0.1, "#2d2d2d"], [0.5, "orange"], [1, "green"]],
         showscale=False, xgap=3, ygap=3
     ))
@@ -31,7 +55,11 @@ def render_festival_calendar(f_name, f_date_str):
         for j, val in enumerate(row):
             fig.add_annotation(x=j, y=i, text=val, showarrow=False, font=dict(color="white"))
             
-    fig.update_layout(title=f"{f_name} - {calendar.month_name[month]}", 
-                      height=280, yaxis_autorange='reversed', template="plotly_dark",
-                      margin=dict(l=10, r=10, t=40, b=10))
+    fig.update_layout(
+        title=f"{f_name} Impact - {calendar.month_name[month]}", 
+        height=280, 
+        yaxis_autorange='reversed', 
+        template="plotly_dark",
+        margin=dict(l=10, r=10, t=40, b=10)
+    )
     return fig
