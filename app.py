@@ -16,33 +16,40 @@ else:
     tab_data, tab_engine, tab_viz = st.tabs(["📤 Data Sources", "🧠 Model Tuning", "📊 Analytics"])
 
     with tab_data:
-        st.subheader("1. Data Intake (5-File System)")
-        c1, c2 = st.columns(2)
-        with c1:
-            sales_f = st.file_uploader("Sales History (Required)", type=["csv"])
-            mkt_f = st.file_uploader("Marketing Spend (Optional)", type=["csv"])
-            master_f = st.file_uploader("SKU Master (Optional)", type=["csv"])
-        with c2:
-            fest_f = st.file_uploader("Festival Calendar (Optional)", type=["csv"])
-            event_f = st.file_uploader("Events / PR (Optional)", type=["csv"])
-
-        # --- DATA INTEGRITY CHECK SECTION ---
-        if sales_f:
-            st.divider()
-            st.subheader("🔍 Data Integrity Check")
-            cleaned_sales = auto_clean_sales_file(sales_f)
+    st.subheader("1. Data Intake")
+    sales_f = st.file_uploader("Upload Sales History", type=["csv"])
+    
+    if sales_f:
+        # Step A: Clean the data
+        cleaned_sales = auto_clean_sales_file(sales_f)
+        
+        # Step B: Display Integrity Check
+        st.divider()
+        st.subheader("🔍 Data Integrity Check")
+        health_reports = run_integrity_check(cleaned_sales, "Sales Data")
+        for report in health_reports:
+            if "✅" in report: st.success(report)
+            elif "⚠️" in report: st.warning(report)
+            else: st.info(report)
             
-            # Run the diagnostic engine
-            health_reports = run_integrity_check(cleaned_sales, "Sales Data")
-            
-            # Display results in a clean list
-            for report in health_reports:
-                if "✅" in report: st.success(report)
-                elif "⚠️" in report: st.warning(report)
-                elif "❌" in report: st.error(report)
-                else: st.info(report)
-            
-            st.session_state['cleaned_data'] = cleaned_sales
+        # Step C: THE RE-CHECK OPTION (New Requirement)
+        st.divider()
+        st.subheader("2. Verify & Re-Check Cleaned Data")
+        st.info("Download the cleaned version below to verify how the AI has repaired your headers and dates.")
+        
+        # Convert cleaned dataframe to CSV for download
+        csv_buffer = cleaned_sales.to_csv(index=False).encode('utf-8')
+        
+        st.download_button(
+            label="📥 Download Cleaned Sales for Verification",
+            data=csv_buffer,
+            file_name="verified_cleaned_sales.csv",
+            mime="text/csv",
+            help="Click here to see the file after column renaming and daily aggregation."
+        )
+        
+        # Save to session state for other tabs
+        st.session_state['ready_data'] = cleaned_sales
 
         # --- COMPLETE DOWNLOAD TEMPLATES SECTION ---
         st.divider()
@@ -66,3 +73,4 @@ else:
 
     with tab_engine:
         st.write("Model Tuning configurations will appear here once data is verified.")
+
