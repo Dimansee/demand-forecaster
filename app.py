@@ -181,8 +181,9 @@ else:
             fig.update_layout(
                 template="plotly_dark", 
                 hovermode="x unified",
-                title=f"Forecast Strategy vs History: {selected_sku}",
-            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+                height = 600,
+                margin = dict(l=0, r=0, t=0, b=0),
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
             )
     
             st.plotly_chart(fig, use_container_width=True)
@@ -190,6 +191,7 @@ else:
             # Detailed Table
             st.subheader("📋 Production Execution Schedule")
             st.dataframe(res[['date', 'forecast', 'net_demand', 'inventory_target']].head(20), use_container_width=True)
+
 
 
 
