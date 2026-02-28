@@ -125,12 +125,25 @@ else:
     with tab_viz:
         if 'current_forecast' in st.session_state:
             res = st.session_state['current_forecast']
+
+            # CRITICAL FIX: Ensure res is a DataFrame
+            if isinstance(res, list):
+                res = pd.DataFrame(res)
+        
             st.header("📊 Forecast Analytics")
-            m1, m2, m3 = st.columns(3)
-            m1.metric("Gross Demand", f"{int(res['forecast'].sum()):,}")
-            m2.metric("Net Demand", f"{int(res['net_demand'].sum()):,}")
-            m3.metric("Inventory Target", f"{int(res['inventory_target'].sum()):,}")
-            
-            import plotly.express as px
-            fig = px.line(res, x='date', y=['forecast', 'net_demand', 'inventory_target'], template="plotly_dark")
-            st.plotly_chart(fig, use_container_width=True)
+
+            # Use .get() or check if column exists to prevent more crashes
+            if 'forecast' in res.columns:
+                m1, m2, m3 = st.columns(3)
+                m1.metric("Gross Demand", f"{int(res['forecast'].sum()):,}")
+                m2.metric("Net Demand", f"{int(res['net_demand'].sum()):,}")
+                m3.metric("Inventory Target", f"{int(res['inventory_target'].sum()):,}")
+        
+                # Plotting
+                import plotly.express as px
+                fig = px.line(res, x='date', y=['forecast', 'net_demand', 'inventory_target'], 
+                              template="plotly_dark", title="Projected Demand Timeline")
+                st.plotly_chart(fig, use_container_width=True)
+            else:
+                st.error("The model failed to generate a 'forecast' column. Check your data format.")
+
