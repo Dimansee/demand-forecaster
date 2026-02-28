@@ -15,9 +15,9 @@ from forecast_models.knn_model import run_knn
 from forecast_models.prophet_model import run_prophet
 
 # ---------------- PAGE CONFIG ----------------
-st.set_page_config(page_title="Pro Demand Planner v5.2", layout="wide")
+st.set_page_config(page_title="Pro Demand Planner v5.3", layout="wide")
 
-# --- AUTOMATIC DATA CLEANING ENGINE ---
+# --- AUTOMATIC DATA CLEANING ENGINE (SALES) ---
 def auto_clean_sales_file(file):
     try:
         df = pd.read_csv(file)
@@ -36,7 +36,7 @@ def auto_clean_sales_file(file):
         df = df.rename(columns=rename_map)
 
         if 'date' not in df.columns:
-            st.error("❌ Error: 'Date' column not found. Please check your CSV headers.")
+            st.error("❌ Error: 'Date' column not found in Sales file. Please check headers.")
             return None
 
         # Convert Date and handle errors
@@ -69,24 +69,24 @@ def show_static_documentation():
     with doc_tabs[0]:
         st.subheader("Key Performance Indicators (KPIs)")
         st.markdown("""
-        * **Gross Demand**: The total predicted units before any returns or buffers are applied.
-        * **Growth % vs Past**: A direct comparison of the 90-day forecast against the last 90 days of history.
-        * **Production Ready Date**: Calculated as `Today + Lead Time`. Tells you when to start manufacturing.
+        * **Gross Demand**: Raw prediction before returns or buffers.
+        * **Growth % vs Past**: Comparison of 90-day forecast against last 90-day history.
+        * **Production Ready Date**: Calculated as `Today + Lead Time`.
         """)
 
     with doc_tabs[1]:
         st.subheader("Algorithmic Breakdown")
         st.markdown("""
-        * **Prophet**: Uses additive regression to find seasonal patterns and holiday spikes.
-        * **KNN**: Finds historical days with similar features (month, festival proximity) to predict future values.
+        * **Prophet**: Uses additive regression for seasonal patterns.
+        * **KNN**: Finds historical days with similar patterns to predict future values.
         """)
 
     with doc_tabs[2]:
         st.subheader("Auto-Cleaning Module")
         st.markdown("""
-        * **Standardization**: Automatically converts 'Date' or 'date' or 'DATE' into a standard format.
-        * **Deduplication**: If an SKU has multiple orders on one day, the system sums the quantity.
-        * **Verification**: Allows you to download the "Cleaned" file before running the AI.
+        * **Standardization**: Converts 'Date' variants into a standard ISO format.
+        * **Deduplication**: Sums multiple orders occurring on the same day for a single SKU.
+        * **Verification**: Provides a "Cleaned" file download for manual review.
         """)
     if st.button("Close Manual"):
         st.session_state.page = "Forecaster"; st.rerun()
@@ -100,69 +100,80 @@ pg = st.sidebar.radio("Navigation", ["Forecaster", "Documentation"])
 if pg == "Documentation":
     show_static_documentation()
 else:
-    st.title("📦 Pro Demand Forecasting Engine v5.2")
+    st.title("📦 Pro Demand Forecasting Engine v5.3")
     
     tab_data, tab_engine, tab_viz = st.tabs(["📤 Data Intake", "🧠 Strategy Tuning", "📊 Analytics"])
 
-    # ---------------- TAB 1: DATA INTAKE & AUTO-CLEAN ----------------
+    # ---------------- TAB 1: DATA INTAKE & INTEGRITY ----------------
     with tab_data:
-        st.subheader("1. Upload & Verify Sales Data")
-        sales_file = st.file_uploader("Upload Sales CSV (Date, SKU, Quantity/Sales...)", type=["csv"])
-        
-        if sales_file:
-            # Execute Auto-Cleaning
-            cleaned_df = auto_clean_sales_file(sales_file)
-            
-            if cleaned_df is not None:
-                st.success("✅ Data Cleaned & Standardized Automatically")
-                
-                c1, c2 = st.columns([2, 1])
-                with c1:
-                    st.write("Preview of Cleaned Dataset:")
-                    st.dataframe(cleaned_df.head(10), use_container_width=True)
-                with c2:
-                    # Verification Download Button
-                    csv_buffer = io.StringIO()
-                    cleaned_df.to_csv(csv_buffer, index=False)
-                    st.download_button(
-                        label="📥 Download Cleaned File for Verification",
-                        data=csv_buffer.getvalue(),
-                        file_name="verified_cleaned_data.csv",
-                        mime="text/csv"
-                    )
-        
-        st.divider()
-        st.subheader("2. Metadata & Templates")
-        t_cols = st.columns(3)
-        t_cols[0].download_button("Download Sales Template", "Date,SKU,Quantity,Order Number\n2026-01-01,SKU01,50,ORD101", "template.csv")
+        st.subheader("1. Data Upload Center")
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            sales_file = st.file_uploader("Sales History (Required)", type=["csv"])
+            sku_master_file = st.file_uploader("SKU Master (Optional)", type=["csv"])
+        with c2:
+            marketing_file = st.file_uploader("Marketing Spend (Optional)", type=["csv"])
+            festival_file = st.file_uploader("Festival Calendar (Optional)", type=["csv"])
+        with c3:
+            events_file = st.file_uploader("Events / PR (Optional)", type=["csv"])
 
-    # ---------------- TAB 2: MODEL TUNING & MULTI-CALENDAR ----------------
+        st.divider()
+        
+        # --- DATA INTEGRITY & AUTO-CLEAN STATUS ---
+        st.subheader("🔍 Data Integrity & Verification")
+        if sales_file:
+            cleaned_sales = auto_clean_sales_file(sales_file)
+            if cleaned_sales is not None:
+                st.success("✅ Sales Data Cleaned Automatically")
+                col_v1, col_v2 = st.columns([2, 1])
+                with col_v1:
+                    st.dataframe(cleaned_sales.head(5), use_container_width=True)
+                with col_v2:
+                    # Verification Download
+                    csv_buf = io.StringIO()
+                    cleaned_sales.to_csv(csv_buf, index=False)
+                    st.download_button("📥 Download Cleaned Sales File", csv_buf.getvalue(), "cleaned_sales.csv", "text/csv")
+        else:
+            st.warning("Please upload a Sales file to begin.")
+
+        st.divider()
+        st.subheader("📥 Templates Download")
+        t_cols = st.columns(5)
+        t_cols[0].download_button("Sales Template", "Date,SKU,Quantity,Order Number\n2026-01-01,SKU01,50,ORD101", "sales_template.csv")
+        t_cols[1].download_button("Master Template", "sku,category,color,fabric\nSKU01,Topwear,Red,Cotton", "master_template.csv")
+        t_cols[2].download_button("Marketing Template", "date,sku,spend\n2026-01-01,SKU01,1500", "mkt_template.csv")
+        t_cols[3].download_button("Festival Template", "date,festival_name\n2026-12-25,Christmas", "fest_template.csv")
+        t_cols[4].download_button("Events Template", "date,event_type\n2026-06-01,PR_Launch", "event_template.csv")
+
+    # ---------------- TAB 2: MODEL TUNING & CALENDAR ----------------
     with tab_engine:
-        if sales_file and 'cleaned_df' in locals():
-            st.subheader("1. Strategy Configuration")
+        if sales_file and 'cleaned_sales' in locals():
+            # Merging additional data using your data_prep logic
+            df = clean_all_data(sales_file, marketing_file, festival_file, events_file, sku_master_file)
+            
+            st.subheader("1. Configuration & Strategy")
             col_p1, col_p2 = st.columns(2)
             with col_p1:
-                business_type = st.selectbox("Industry Strategy", ["Fashion", "FMCG", "Electronics", "Seasonal"])
-                selected_sku = st.selectbox("Select SKU to Forecast", cleaned_df['sku'].unique())
-                sku_df = cleaned_df[cleaned_df['sku'] == selected_sku].sort_values('date').copy()
+                business_type = st.selectbox("Industry Type", ["Fashion", "FMCG", "Electronics", "Seasonal"])
+                selected_sku = st.selectbox("Select Target SKU", cleaned_sales['sku'].unique())
+                sku_df = cleaned_sales[cleaned_sales['sku'] == selected_sku].sort_values('date').copy()
             with col_p2:
-                model_choice = st.selectbox("Forecast Algorithm", ["Prophet", "Decision Tree", "KNN", "Moving Average"])
+                model_choice = st.selectbox("Algorithm", ["Prophet", "Decision Tree", "KNN", "Moving Average"])
                 d_lead = st.number_input("Lead Time (Days)", 1, 365, 30)
 
             st.divider()
-            st.subheader("2. Operational Settings")
+            st.subheader("2. Strategic Levers")
             col_s1, col_s2, col_s3 = st.columns(3)
             with col_s1:
                 d_returns = st.number_input("Return Rate %", 0, 100, 25)
                 d_buffer = st.number_input("Safety Buffer %", 0, 100, 15)
             with col_s2:
-                d_surge = st.number_input("Trend Surge (x)", 0.5, 5.0, 1.0)
+                d_surge = st.number_input("Trend Surge (Multiplier)", 0.5, 5.0, 1.0)
             with col_s3:
                 c_marketing = st.number_input("Marketing Lift %", 0, 500, 0)
 
             st.divider()
-            st.subheader("3. 📅 Multi-Festival Calendar & Impact")
-            
+            st.subheader("3. 📅 Festival Impact Calendar")
             fest_dict = {"Christmas": "2026-12-25", "Diwali": "2026-11-08", "Eid": "2026-03-20", "Holi": "2026-03-03"}
             col_f1, col_f2 = st.columns([1, 2])
             with col_f1:
@@ -171,7 +182,6 @@ else:
                 orange_lift = st.slider("Window Days Lift %", 0, 100, 30)
             
             with col_f2:
-                # Loop through all selected festivals to show multiple calendars
                 for f_name in selected_fests:
                     f_date = pd.to_datetime(fest_dict[f_name])
                     year, month = f_date.year, f_date.month
@@ -200,51 +210,49 @@ else:
                     for i, row in enumerate(text_data):
                         for j, val in enumerate(row):
                             fig_cal.add_annotation(x=j, y=i, text=val, showarrow=False, font=dict(color="white"))
-                    fig_cal.update_layout(title=f"{f_name} - {calendar.month_name[month]}", height=300, yaxis_autorange='reversed', template="plotly_dark")
+                    fig_cal.update_layout(title=f"{f_name} View", height=300, yaxis_autorange='reversed', template="plotly_dark")
                     st.plotly_chart(fig_cal, use_container_width=True)
 
     # ---------------- TAB 3: ANALYTICS ----------------
     with tab_viz:
         if sales_file and 'sku_df' in locals():
-            # Comparison Baseline
             past_90_sum = sku_df['sales'].tail(90).sum()
             
-            # Forecast Execution
+            # Run Forecasting
             if model_choice == "Prophet": forecast_df = run_prophet(sku_df, industry=business_type)
             elif model_choice == "KNN": forecast_df = run_knn(sku_df)
             else: forecast_df = run_moving_avg(sku_df)
 
-            # Apply Festival Lifts
+            # Apply Logic
             for f in selected_fests:
                 t = pd.to_datetime(fest_dict[f])
                 forecast_df.loc[forecast_df['date'] == t, 'forecast'] *= (1 + green_lift/100)
                 forecast_df.loc[forecast_df['date'].isin([t-timedelta(days=2), t-timedelta(days=1), t+timedelta(days=1)]), 'forecast'] *= (1 + orange_lift/100)
 
-            # Final Math
             forecast_df['forecast'] *= d_surge * (1 + (c_marketing/100))
             forecast_df['net_demand'] = forecast_df['forecast'] * (1 - (d_returns/100))
             forecast_df['target'] = forecast_df['net_demand'] * (1 + (d_buffer/100))
 
-            # Growth Comparison Logic
             future_sum = forecast_df['forecast'].sum()
             growth_pct = ((future_sum - past_90_sum) / past_90_sum * 100) if past_90_sum > 0 else 0
 
-            # METRICS WITH COMPARISONS
+            # METRICS WITH COMPARISON
             m1, m2, m3, m4 = st.columns(4)
-            m1.metric("Gross Demand", f"{int(future_sum):,}", f"{growth_pct:+.1f}% vs Past 90d")
+            m1.metric("Gross Demand Forecast", f"{int(future_sum):,}", f"{growth_pct:+.1f}% vs Past 90d")
             m2.metric("Inventory Goal", f"{int(forecast_df['target'].sum()):,}", f"Buffer: {d_buffer}%")
             m3.metric("Lead Time Readiness", (datetime.now() + timedelta(days=d_lead)).strftime("%d %b"))
-            m4.metric("Avg Daily Demand", f"{int(forecast_df['forecast'].mean()):,}")
+            m4.metric("Avg Daily Units", f"{int(forecast_df['forecast'].mean()):,}")
 
-            # CHART
+            # TREND CHART
+            
             fig = go.Figure()
-            fig.add_trace(go.Scatter(x=sku_df['date'], y=sku_df['sales'], name="History", line=dict(color='royalblue')))
-            fig.add_trace(go.Scatter(x=forecast_df['date'], y=forecast_df['forecast'], name="Forecast", line=dict(color='#00ffcc')))
+            fig.add_trace(go.Scatter(x=sku_df['date'], y=sku_df['sales'], name="Historical Sales", line=dict(color='royalblue')))
+            fig.add_trace(go.Scatter(x=forecast_df['date'], y=forecast_df['forecast'], name="Forecast Strategy", line=dict(color='#00ffcc')))
             
             for f in selected_fests:
                 t = pd.to_datetime(fest_dict[f])
                 fig.add_vrect(x0=t-timedelta(days=2), x1=t+timedelta(days=1), fillcolor="orange", opacity=0.1, line_width=0)
 
-            fig.update_layout(template="plotly_dark", title="Demand Outlook")
+            fig.update_layout(template="plotly_dark", title=f"Demand Trajectory: {selected_sku}")
             st.plotly_chart(fig, use_container_width=True)
-            st.download_button("Export Final Plan", forecast_df.to_csv(index=False), "demand_plan.csv")
+            st.download_button("Export Production Plan", forecast_df.to_csv(index=False), "demand_plan.csv")
