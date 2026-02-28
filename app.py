@@ -123,27 +123,72 @@ else:
             st.warning("Please upload Sales Data first.")
 
     with tab_viz:
-        if 'current_forecast' in st.session_state:
+        if 'current_forecast' in st.session_state and 'cleaned_df' in st.session_state:
             res = st.session_state['current_forecast']
+            hist_df = st.session_state['cleaned_df']
 
-            # CRITICAL FIX: Ensure res is a DataFrame
-            if isinstance(res, list):
-                res = pd.DataFrame(res)
-        
+            # 1. Prepare Historical Data (Last 90-180 days for context)
+            sku_hist = hist_df[hist_df['sku'] == selected_sku].copy().sort_values('date')
+            sku_hist['type'] = 'Historical (Smooth)'
+            # Optional: 7-day rolling average to match your reference image
+            sku_hist['sales_smooth'] = sku_hist['sales'].rolling(window=7, center=True).mean()
+
+            # 2. Prepare Forecast Data
+            res['type'] = 'Strategy Plan'
+    
             st.header("📊 Forecast Analytics")
+    
+            # METRICS ROW (Same as your reference image)
+            m1, m2, m3, m4 = st.columns(4)
+            past_total = sku_hist['sales'].tail(90).sum()
+            future_total = res['forecast'].sum()
+            growth = ((future_total - past_total) / past_total) * 100 if past_total > 0 else 0
+    
+            m1.metric("Gross Demand Forecast", f"{int(future_total):,}", f"{growth:+.1f}% vs Past 90d")
+            m2.metric("Inventory Target", f"{int(res['inventory_target'].sum()):,}", f"Buffer: {d_buff}%")
+            m3.metric("Avg Daily Demand", f"{int(res['forecast'].mean()):,}")
+            m4.metric("Production Ready By", (datetime.now() + timedelta(days=30)).strftime("%d %b"))
 
-            # Use .get() or check if column exists to prevent more crashes
-            if 'forecast' in res.columns:
-                m1, m2, m3 = st.columns(3)
-                m1.metric("Gross Demand", f"{int(res['forecast'].sum()):,}")
-                m2.metric("Net Demand", f"{int(res['net_demand'].sum()):,}")
-                m3.metric("Inventory Target", f"{int(res['inventory_target'].sum()):,}")
-        
-                # Plotting
-                import plotly.express as px
-                fig = px.line(res, x='date', y=['forecast', 'net_demand', 'inventory_target'], 
-                              template="plotly_dark", title="Projected Demand Timeline")
-                st.plotly_chart(fig, use_container_width=True)
-            else:
-                st.error("The model failed to generate a 'forecast' column. Check your data format.")
+            # 3. COMBINED VISUALIZATION (Plotly Graph Objects)
+            import plotly.graph_objects as go
+    
+            fig = go.Figure()
+
+            # Add Historical Line
+            fig.add_trace(go.Scatter(
+                x=sku_hist['date'], y=sku_hist['sales_smooth'],
+                name="Historical (Smooth)",
+                line=dict(color='royalblue', width=3)
+            ))
+
+            # Add Forecast Line (Strategy Plan)
+            fig.add_trace(go.Scatter(
+                x=res['date'], y=res['forecast'],
+                name="Strategy Plan",
+                line=dict(color='#00ffcc', width=4)
+            ))
+
+            # Add Festival Highlight Rectangles (Optional, but in your reference)
+            for f in selected_fests:
+                if f in FESTIVAL_DICT:
+                    t = pd.to_datetime(FESTIVAL_DICT[f])
+                    fig.add_vrect(
+                        x0=t-timedelta(days=2), x1=t+timedelta(days=2),
+                        fillcolor="orange", opacity=0.15, layer="below", line_width=0,
+                        annotation_text=f
+                    )
+
+            fig.update_layout(
+                template="plotly_dark", 
+                hovermode="x unified",
+                title=f"Forecast Strategy vs History: {selected_sku}",
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+            )
+    
+            st.plotly_chart(fig, use_container_width=True)
+    
+            # Detailed Table
+            st.subheader("📋 Production Execution Schedule")
+            st.dataframe(res[['date', 'forecast', 'net_demand', 'inventory_target']].head(20), use_container_width=True)
+
 
