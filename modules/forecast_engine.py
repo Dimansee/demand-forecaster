@@ -1,7 +1,7 @@
-from forecast_models.moving_avg import run_moving_avg
-from forecast_models.decision_tree import run_decision_tree
-from forecast_models.knn_model import run_knn
-from forecast_models.prophet_model import run_prophet
+from modules.forecast_models.moving_avg import run_moving_avg
+from modules.forecast_models.decision_tree import run_decision_tree
+from modules.forecast_models.knn_model import run_knn
+from modules.forecast_models.prophet_model import run_prophet
 
 def run_forecast(model_choice, sku_df, industry):
 
