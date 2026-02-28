@@ -1,28 +1,28 @@
 import streamlit as st
-import knowledge_center as kc  # Import the new instruction file
+import knowledge_center as kc
 
 def show_static_documentation():
     st.title("📖 Comprehensive System Manual")
-    
-    doc_tabs = st.tabs(["📊 KPI Definitions", "🧠 Model Mechanics", "🧼 Data Logic"])
-    
-    with doc_tabs[0]:
-        st.subheader("Key Performance Indicators")
-        st.markdown(kc.KPI_INFO["gross_demand"])
-        st.markdown(kc.KPI_INFO["return_rate"])
-        st.markdown(kc.KPI_INFO["safety_buffer"])
+    tab1, tab2, tab3 = st.tabs(["📊 KPI Definitions", "🧠 Model Mechanics", "🛠️ Module Overview"])
 
-    with doc_tabs[1]:
+    with tab1:
+        st.subheader("Key Performance Indicators (KPIs)")
+        st.markdown(f"**1. Gross Demand**: {kc.KPI_DEFINITIONS['Gross Demand']}")
+        st.write(f"**2. Return Rate (%)**")
+        st.write(f"- Logic: {kc.KPI_DEFINITIONS['Return Rate']['Logic']}")
+        st.write(f"- Formula: {kc.KPI_DEFINITIONS['Return Rate']['Formula']}")
+        st.write(f"- Business Value: {kc.KPI_DEFINITIONS['Return Rate']['Value']}")
+        # ... Add Trend Surge and Safety Buffer similarly ...
+
+    with tab2:
         st.subheader("Algorithmic Logic")
-        for model, desc in kc.MODEL_MECHANICS.items():
-            st.write(f"**{model}**: {desc}")
+        for model, details in kc.MODEL_MECHANICS.items():
+            st.write(f"### {model}")
+            if isinstance(details, list):
+                for line in details: st.write(line)
+            else: st.write(details)
 
-    with doc_tabs[2]:
-        st.subheader("Cleaning & System Guide")
-        st.markdown(kc.SYSTEM_GUIDE)
-        st.divider()
-        st.markdown(kc.CLEANING_PROTOCOLS)
-        
-    if st.button("Close Manual"):
-        st.session_state.page = "Forecaster"
-        st.rerun()
+    with tab3:
+        st.subheader("Module Functionality")
+        for module, desc in kc.MODULE_OVERVIEW.items():
+            st.write(f"**{module}**: {desc}")
