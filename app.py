@@ -15,50 +15,81 @@ from forecast_models.knn_model import run_knn
 from forecast_models.prophet_model import run_prophet
 
 # ---------------- PAGE CONFIG ----------------
-st.set_page_config(page_title="Pro Demand Planner v5.4", layout="wide")
+st.set_page_config(page_title="Pro Demand Planner v5.6", layout="wide")
 
-# --- NEW: ADVANCED AUTO-CLEANING ENGINE ---
+# --- ENHANCED: ADVANCED AUTO-CLEANING & REPAIR ENGINE ---
 def auto_clean_sales_file(file):
     try:
+        # Crucial fix for "No columns to parse": Reset file pointer
+        file.seek(0)
         df = pd.read_csv(file)
+        
+        if df.empty:
+            st.error("The uploaded file is empty.")
+            return None
+
         # 1. Standardize column names (lowercase and stripped)
         df.columns = [c.strip().lower() for c in df.columns]
         
-        # 2. Flexible Mapping for required fields
+        # 2. Advanced Mapping (Handles variations like 'Orders', 'Volume', 'Price')
         rename_map = {
-            'date': 'date', 
-            'quantity': 'sales', 
-            'qty': 'sales', 
-            'sales': 'sales',
-            'product': 'product_name',
-            'order number': 'order_id'
+            'date': 'date', 'dat': 'date', 'timestamp': 'date',
+            'quantity': 'sales', 'qty': 'sales', 'sales': 'sales', 'sold': 'sales',
+            'product': 'product_name', 'item': 'product_name',
+            'order number': 'order_id', 'id': 'order_id'
         }
         df = df.rename(columns=rename_map)
 
+        # 3. Structural Validation
         if 'date' not in df.columns:
-            st.error("❌ 'Date' column missing in Sales CSV.")
+            st.error("❌ 'Date' column missing. Expected headers like: Date, SKU, Sales.")
             return None
 
-        # 3. Type Conversion & Cleaning
+        # 4. Data Type Repair
         df['date'] = pd.to_datetime(df['date'], errors='coerce')
         df = df.dropna(subset=['date']) 
         
+        # Numeric Repair for Sales
         if 'sales' in df.columns:
             df['sales'] = pd.to_numeric(df['sales'], errors='coerce').fillna(0)
         else:
-            df['sales'] = 0
+            # Attempt to find any numeric column to treat as Sales if missing
+            numeric_cols = df.select_dtypes(include=[np.number]).columns
+            if not numeric_cols.empty:
+                df = df.rename(columns={numeric_cols[0]: 'sales'})
+            else:
+                df['sales'] = 0
 
         # Fill optional columns with "N/A" if they don't exist
         for col in ['sku', 'product_name', 'order_id']:
             if col not in df.columns:
-                df[col] = "N/A"
+                df[col] = "Default_SKU" if col == 'sku' else "N/A"
 
-        # 4. Aggregation to Daily SKU level
+        # 5. Deduplication & Daily Aggregation
         df = df.groupby(['date', 'sku']).agg({'sales': 'sum'}).reset_index()
+        
+        # 6. Sorting for Time-Series Integrity
+        df = df.sort_values(['sku', 'date'])
+        
         return df
     except Exception as e:
-        st.error(f"Auto-Cleaning Error: {e}")
+        st.error(f"Auto-Cleaning System Error: {e}")
         return None
+
+# --- NEW: DATA HEALTH ANALYTICS ---
+def get_data_health_report(df):
+    report = {}
+    report['total_records'] = len(df)
+    report['unique_skus'] = df['sku'].nunique()
+    report['date_range'] = f"{df['date'].min().strftime('%Y-%m-%d')} to {df['date'].max().strftime('%Y-%m-%d')}"
+    
+    # Identify Gaps in dates
+    expected_range = pd.date_range(start=df['date'].min(), end=df['date'].max())
+    report['missing_days'] = len(expected_range) - df['date'].nunique()
+    
+    # Identify Zero Sales Days
+    report['zero_days'] = len(df[df['sales'] == 0])
+    return report
 
 # ---------------- STATIC KNOWLEDGE CENTER (IN-DEPTH) ----------------
 def show_static_documentation():
@@ -77,10 +108,11 @@ def show_static_documentation():
         - **Formula:** $Net Demand = Gross Demand \times (1 - Return\%)$
         
         ### 3. Trend Surge (Multiplier)
-        - **Logic:** A user-driven growth factor for scaling predictions.
+        - **Logic:** A user-driven growth factor for scaling predictions. 
         
         ### 4. Safety Buffer (%)
         - **Logic:** The "Insurance" stock to prevent stockouts.
+        - **Formula:** $Target = Net Demand \times (1 + Buffer\%)$
         """)
 
     with doc_tabs[1]:
@@ -90,18 +122,18 @@ def show_static_documentation():
         Uses an additive regression model. It breaks time-series into Trend, Seasonality, and Holidays.
         
         ### 2. KNN (K-Nearest Neighbors)
-        Finds 'K' historical days most similar to the target date.
+        Finds 'K' historical days most similar to the target date and uses their average.
         
         ### 3. Decision Tree
-        A tree-like model that identifies how factors like marketing trigger specific demand levels.
+        A supervised learning method that uses a tree-like model of decisions based on seasonality and features.
         """)
 
     with doc_tabs[2]:
         st.subheader("Module Functionality")
         st.markdown("""
-        - **Data Prep Module:** Cleans date formats and merges disparate files.
-        - **Forecast Engine:** Routes data to the selected model.
-        - **Strategy Overrider:** Applies manual 'Custom' inputs (Festival Lifts).
+        - **Data Prep Module:** Cleans date formats and merges disparate files (Marketing, Events, Sales).
+        - **Forecast Engine:** A centralized hub that routes your SKU data to the selected math model.
+        - **Strategy Overrider:** Takes AI results and applies manual 'Custom' inputs.
         """)
 
     with doc_tabs[3]:
@@ -110,6 +142,7 @@ def show_static_documentation():
         - **Standardization:** Automatically handles 'Date' vs 'date' vs 'DATE'.
         - **Deduplication:** Sums multiple quantities sold on the same day for a single SKU.
         - **Safety:** Converts non-numeric sales entries to 0 to prevent model failure.
+        - **Pointer Reset:** Ensures CSVs can be read multiple times without "Empty File" errors.
         """)
         
     if st.button("Close Manual"):
@@ -147,10 +180,19 @@ else:
             cleaned_sales = auto_clean_sales_file(sales_file)
             if cleaned_sales is not None:
                 st.success("✅ Sales Data Cleaned Successfully")
+                
+                # New: Display Health Report
+                health = get_data_health_report(cleaned_sales)
+                h1, h2, h3, h4 = st.columns(4)
+                h1.metric("SKUs Found", health['unique_skus'])
+                h2.metric("Date Range", "Active", help=health['date_range'])
+                h3.metric("Missing Days", health['missing_days'], delta="Gap Found" if health['missing_days']>0 else "Perfect")
+                h4.metric("Zero-Sales Rows", health['zero_days'])
+
                 st.write("Preview of Cleaned Data:")
                 st.dataframe(cleaned_sales.head(5), use_container_width=True)
                 
-                # New: Download Cleaned Data for verification
+                # Verification Download
                 csv_buffer = io.StringIO()
                 cleaned_sales.to_csv(csv_buffer, index=False)
                 st.download_button("📥 Download Cleaned Sales File for Verification", csv_buffer.getvalue(), "cleaned_sales.csv", "text/csv")
@@ -252,13 +294,16 @@ else:
                                 fig_cal.add_annotation(x=j, y=i, text=val, showarrow=False, font=dict(color="white"))
                         fig_cal.update_layout(title=f"{f_name} - {calendar.month_name[month]}", height=300, yaxis_autorange='reversed', template="plotly_dark")
                         st.plotly_chart(fig_cal, use_container_width=True)
+        else:
+            st.warning("⚠️ Waiting for Sales Data Upload to enable Tuning Engine.")
 
     # ---------------- TAB 3: ANALYTICS & COMPARISONS ----------------
     with tab_viz:
-        if sales_file and selected_sku:
+        if sales_file and 'sku_df' in locals():
             past_total = sku_df['sales'].tail(90).sum()
             avg_past = sku_df['sales'].tail(90).mean()
 
+            
             with st.spinner("Executing Strategy Engine..."):
                 if model_choice == "Moving Average": forecast_df = run_moving_avg(sku_df)
                 elif model_choice == "Decision Tree": forecast_df = run_decision_tree(sku_df)
@@ -300,3 +345,5 @@ else:
             st.subheader("📋 Production Execution Schedule")
             st.dataframe(forecast_df[['date', 'forecast', 'net_demand', 'inventory_target']].head(20), use_container_width=True)
             st.download_button("📥 Export Production Plan CSV", forecast_df.to_csv(index=False), "strategy_export.csv")
+        else:
+            st.info("📊 Run the Strategy Tuning in the previous tab to generate analytics.")
