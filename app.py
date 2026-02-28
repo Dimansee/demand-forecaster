@@ -1,6 +1,9 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta
+import plotly.graph_objects as go
+
+# Internal Module Imports
 from data_cleaning import auto_clean_sales_file, run_integrity_check
 from ui_components import show_static_documentation, render_festival_calendar
 from logic_overrides import apply_strategy_logic, FESTIVAL_DICT, apply_holiday_boost
@@ -34,10 +37,7 @@ else:
         with col1: sales_f = st.file_uploader("Sales History (Required)", type=["csv"])
         with col2: mkt_f = st.file_uploader("Marketing Spend (Optional)", type=["csv"])
         with col3: event_f = st.file_uploader("Events / PR (Optional)", type=["csv"])
-        col4, col5, _ = st.columns(3)
-        with col4: master_f = st.file_uploader("SKU Master (Optional)", type=["csv"])
-        with col5: fest_f = st.file_uploader("Festival Calendar (Optional)", type=["csv"])
-
+        
         st.divider()
         st.header("🔍 Data Integrity Check")
         b1, b2, b3, b4, b5 = st.columns(5)
@@ -47,48 +47,34 @@ else:
             st.session_state['cleaned_df'] = cleaned_sales
             reports = run_integrity_check(cleaned_sales, "Sales")
             b1.markdown('<div class="status-badge status-success">✅ Sales<br>Loaded</div>', unsafe_allow_html=True)
-            for r in reports:
-                if "⚠️" in r: st.warning(r)
-                elif "✅" in r: st.success(r)
             
             st.subheader("📋 Verification Preview")
             st.dataframe(cleaned_sales.head(5), use_container_width=True)
-            st.download_button("📥 Download Cleaned Sales", cleaned_sales.to_csv(index=False).encode('utf-8'), "verified_sales.csv")
         else:
             b1.markdown('<div class="status-badge status-required">Sales<br>Required</div>', unsafe_allow_html=True)
-
-        # Status Badges for Optional Files
-        for b, f, n in zip([b2, b3, b4, b5], [master_f, mkt_f, fest_f, event_f], ["SKU Master", "Marketing", "Festivals", "Events"]):
-            status = "status-optional" if f else "status-missing"
-            label = "Loaded" if f else "Optional"
-            b.markdown(f'<div class="status-badge {status}">{n}<br>{label}</div>', unsafe_allow_html=True)
 
     with tab_engine:
         if 'cleaned_df' in st.session_state:
             df = st.session_state['cleaned_df']
             st.header("🧠 Model Tuning & Strategy")
             
-            # --- 1. SELECTION ---
             c_p1, c_p2 = st.columns(2)
             with c_p1:
-                # ADDED: "Custom" strategy option
                 biz_type = st.selectbox("Industry Strategy", ["Fashion", "FMCG", "Electronics", "Seasonal", "Custom"])
                 selected_sku = st.selectbox("Select Target SKU", df['sku'].unique())
             with c_p2:
                 model_choice = st.selectbox("Forecast Algorithm", ["Prophet", "Decision Tree", "KNN", "Moving Average"])
             
             st.divider()
-
-            # --- 2. OPERATIONAL LEVERS (User Customization) ---
             st.subheader("⚙️ Operational Levers")
-            use_ai = st.toggle("Use AI-Suggested Settings", value=True)
+            use_ai = st.toggle("Use AI-Suggested Settings", value=False)
             l1, l2, l3 = st.columns(3)
             
             if use_ai:
                 d_ret, d_buff, d_surge, d_mkt = (25 if biz_type=="Fashion" else 10), 15, 1.0, 0
             else:
                 with l1:
-                    d_ret = st.number_input("Expected Return Rate (%)", 0, 100, 25)
+                    d_ret = st.number_input("Expected Return Rate (%)", 0, 100, 10)
                     d_buff = st.number_input("Safety Buffer (%)", 0, 100, 15)
                 with l2:
                     d_surge = st.number_input("Trend Surge Factor (x)", 0.5, 5.0, 1.0, 0.1)
@@ -96,29 +82,18 @@ else:
                     d_mkt = st.number_input("Marketing Lift (%)", 0, 500, 0)
 
             st.divider()
-
-            # --- 3. FESTIVAL CALENDAR ---
-            st.subheader("📅 Multi-Festival Calendar Control")
-            cf1, cf2 = st.columns([1, 2])
-            with cf1:
-                selected_fests = st.multiselect("Active Festivals", list(FESTIVAL_DICT.keys()), default=["Christmas"])
-                peak_lift = st.slider("Peak Day Lift %", 10, 200, 60)
-                win_lift = st.slider("Window Days Lift %", 5, 100, 30)
-            
-            with cf2:
-                for f_name in selected_fests:
-                    f_date = FESTIVAL_DICT[f_name]
-                    fig = render_festival_calendar(f_name, f_date)
-                    st.plotly_chart(fig, use_container_width=True)
+            st.subheader("📅 Festival Impact")
+            selected_fests = st.multiselect("Active Festivals", list(FESTIVAL_DICT.keys()), default=["Christmas"])
+            peak_lift = st.slider("Peak Day Lift %", 10, 200, 60)
+            win_lift = st.slider("Window Days Lift %", 5, 100, 30)
 
             if st.button("🚀 Run Forecast Simulation", use_container_width=True):
+                # Pass selected_sku to engine
                 raw = get_forecast(df, selected_sku, model_choice, biz_type)
-                # Apply Festival Logic
                 raw = apply_holiday_boost(raw, selected_fests, peak_lift, win_lift)
-                # Apply Strategy Logic
                 final = apply_strategy_logic(raw, d_surge, d_mkt, d_ret, d_buff)
                 st.session_state['current_forecast'] = final
-                st.success("Simulation Complete!")
+                st.success("Simulation Complete! Head to 'Forecast Analytics' tab.")
         else:
             st.warning("Please upload Sales Data first.")
 
@@ -126,72 +101,46 @@ else:
         if 'current_forecast' in st.session_state and 'cleaned_df' in st.session_state:
             res = st.session_state['current_forecast']
             hist_df = st.session_state['cleaned_df']
+            
+            # Ensure res is a DataFrame
+            if isinstance(res, list):
+                res = pd.DataFrame(res)
 
-            # 1. Prepare Historical Data (Last 90-180 days for context)
+            # 1. Prepare Wide-Screen Spiky Historical Data
             sku_hist = hist_df[hist_df['sku'] == selected_sku].copy().sort_values('date')
-            sku_hist['type'] = 'Historical (Smooth)'
-            # Optional: 7-day rolling average to match your reference image
-            sku_hist['sales_smooth'] = sku_hist['sales']
-
-            # 2. Prepare Forecast Data
-            res['type'] = 'Strategy Plan'
-    
+            
             st.header("📊 Forecast Analytics")
-    
-            # METRICS ROW (Same as your reference image)
             m1, m2, m3, m4 = st.columns(4)
-            past_total = sku_hist['sales'].tail(90).sum()
-            future_total = res['forecast'].sum()
-            growth = ((future_total - past_total) / past_total) * 100 if past_total > 0 else 0
-    
-            m1.metric("Gross Demand Forecast", f"{int(future_total):,}", f"{growth:+.1f}% vs Past 90d")
-            m2.metric("Inventory Target", f"{int(res['inventory_target'].sum()):,}", f"Buffer: {d_buff}%")
+            m1.metric("Gross Demand Forecast", f"{int(res['forecast'].sum()):,}")
+            m2.metric("Inventory Target", f"{int(res['inventory_target'].sum()):,}")
             m3.metric("Avg Daily Demand", f"{int(res['forecast'].mean()):,}")
             m4.metric("Production Ready By", (datetime.now() + timedelta(days=30)).strftime("%d %b"))
 
-            # 3. COMBINED VISUALIZATION (Plotly Graph Objects)
-            import plotly.graph_objects as go
-    
+            # 2. Build Wide-Format Chart
             fig = go.Figure()
 
-            # Add Historical Line
+            # Historical Raw Spikes (Blue)
             fig.add_trace(go.Scatter(
-                x=sku_hist['date'], y=sku_hist['sales_smooth'],
-                name="Historical (Smooth)",
-                line=dict(color='royalblue', width=3)
+                x=sku_hist['date'], y=sku_hist['sales'],
+                name="Historical Actuals", line=dict(color='royalblue', width=1.5)
             ))
 
-            # Add Forecast Line (Strategy Plan)
-            fig.add_trace(go.Scatter(
-                x=res['date'], y=res['forecast'],
-                name="Strategy Plan",
-                line=dict(color='#00ffcc', width=4)
-            ))
-
-            # Add Festival Highlight Rectangles (Optional, but in your reference)
-            for f in selected_fests:
-                if f in FESTIVAL_DICT:
-                    t = pd.to_datetime(FESTIVAL_DICT[f])
-                    fig.add_vrect(
-                        x0=t-timedelta(days=2), x1=t+timedelta(days=2),
-                        fillcolor="orange", opacity=0.15, layer="below", line_width=0,
-                        annotation_text=f
-                    )
+            # Forecast Layers (Teal, Orange, Green)
+            fig.add_trace(go.Scatter(x=res['date'], y=res['forecast'], name="Gross Forecast", line=dict(color='#00ffcc', width=2)))
+            fig.add_trace(go.Scatter(x=res['date'], y=res['net_demand'], name="Net Demand", line=dict(dash='dot', color='orange', width=1)))
+            fig.add_trace(go.Scatter(x=res['date'], y=res['inventory_target'], name="Inventory Target", line=dict(color='green', width=2.5)))
 
             fig.update_layout(
-                template="plotly_dark", 
+                template="plotly_dark",
                 hovermode="x unified",
-                height = 600,
-                margin = dict(l=0, r=0, t=0, b=0),
+                height=450,  # Focus on Length over Height
+                margin=dict(l=10, r=10, t=40, b=40),
                 legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
             )
-    
-            st.plotly_chart(fig, use_container_width=True)
-    
-            # Detailed Table
+
+            st.plotly_chart(fig, use_container_width=True) # Maximize Width
+            
             st.subheader("📋 Production Execution Schedule")
-            st.dataframe(res[['date', 'forecast', 'net_demand', 'inventory_target']].head(20), use_container_width=True)
-
-
-
-
+            st.dataframe(res[['date', 'forecast', 'net_demand', 'inventory_target']], use_container_width=True)
+        else:
+            st.info("Run a simulation in the 'Model Tuning' tab to see results.")
