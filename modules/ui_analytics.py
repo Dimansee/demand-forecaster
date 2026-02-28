@@ -49,12 +49,20 @@ def analytics_section(df, config):
     ))
 
     # Forecast Start Marker
-    forecast_start = forecast_df['date'].min()
+    forecast_start = forecast_df['date'].min().to_pydatetime()
 
     fig.add_vline(
         x=forecast_start,
         line_dash="dash",
-        annotation_text="Forecast Start"
+        line_width=2
+    )
+
+    fig.add_annotation(
+        x=forecast_start,
+        y=max(forecast_df['forecast']),
+        text="Forecast Start",
+        showarrow=True,
+        arrowhead=1
     )
 
     fig.update_layout(
