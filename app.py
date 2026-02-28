@@ -131,7 +131,7 @@ else:
             sku_hist = hist_df[hist_df['sku'] == selected_sku].copy().sort_values('date')
             sku_hist['type'] = 'Historical (Smooth)'
             # Optional: 7-day rolling average to match your reference image
-            sku_hist['sales_smooth'] = sku_hist['sales'].rolling(window=7, center=True).mean()
+            sku_hist['sales_smooth'] = sku_hist['sales']
 
             # 2. Prepare Forecast Data
             res['type'] = 'Strategy Plan'
@@ -190,5 +190,6 @@ else:
             # Detailed Table
             st.subheader("📋 Production Execution Schedule")
             st.dataframe(res[['date', 'forecast', 'net_demand', 'inventory_target']].head(20), use_container_width=True)
+
 
 
