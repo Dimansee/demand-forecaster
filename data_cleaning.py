@@ -26,16 +26,35 @@ def auto_clean_sales_file(file):
         return None
 
 def run_integrity_check(df, name):
-    """Specific section for Data Integrity."""
-    issues = []
-    if df is None: return ["File missing or unreadable."]
+    """
+    Performs a 4-point health check on the uploaded data.
+    Returns a list of status messages.
+    """
+    report = []
+    if df is None or df.empty:
+        return ["❌ File is empty or could not be parsed."]
+
+    # 1. Null Value Check
+    null_count = df.isnull().sum().sum()
+    if null_count > 0:
+        report.append(f"⚠️ {name}: {null_count} missing values detected and auto-corrected.")
+    else:
+        report.append(f"✅ {name}: No missing values.")
+
+    # 2. Date Continuity Check
+    date_range = (df['date'].max() - df['date'].min()).days
+    actual_days = df['date'].nunique()
+    if actual_days < (date_range * 0.9): # If more than 10% days are missing
+        report.append(f"⚠️ {name}: Significant gaps found in date history.")
+    else:
+        report.append(f"✅ {name}: Chronological continuity verified.")
+
+    # 3. Numeric Outlier/Negative Check
+    if (df['sales'] < 0).any():
+        report.append(f"❌ {name}: Negative sales values found. Converting to zero.")
+        df['sales'] = df['sales'].clip(lower=0)
     
-    if df.isnull().values.any():
-        issues.append(f"⚠️ {name}: Null values detected (auto-filled).")
-    
-    unique_dates = df['date'].nunique()
-    total_rows = len(df)
-    if total_rows > unique_dates and 'sku' not in df.columns:
-         issues.append(f"⚠️ {name}: Duplicate dates found without SKU identifiers.")
-            
-    return issues
+    # 4. SKU Categorization
+    report.append(f"ℹ️ {name}: Identified {df['sku'].nunique()} unique SKUs.")
+
+    return report
