@@ -1,65 +1,48 @@
-# ui_components.py
 import streamlit as st
-import calendar
-import plotly.graph_objects as go
-from datetime import datetime
-import knowledge_center as kc
+from forecast_engine import run_forecast
+from datetime import datetime, timedelta
 
-def show_static_documentation():
-    """Renders the 3-tab system manual."""
-    st.title("📖 Comprehensive System Manual")
-    tab1, tab2, tab3 = st.tabs(["📊 KPI Definitions", "🧠 Model Mechanics", "🛠️ Module Overview"])
+def data_upload_ui():
 
-    with tab1:
-        st.subheader("Key Performance Indicators (KPIs)")
-        st.markdown(f"**1. Gross Demand**: {kc.KPI_DEFINITIONS['Gross Demand']}")
-        st.write(f"**2. Return Rate (%)**")
-        st.write(f"- Formula: {kc.KPI_DEFINITIONS['Return Rate']['Formula']}")
-        # ... (rest of your documentation logic)
+    c1, c2, c3 = st.columns(3)
 
-    with tab2:
-        st.subheader("Algorithmic Logic")
-        # ... (rest of your model logic)
+    with c1:
+        sales_file = st.file_uploader("Sales History", type=["csv"])
+        sku_master_file = st.file_uploader("SKU Master", type=["csv"])
 
-    with tab3:
-        st.subheader("Module Functionality")
-        # ... (rest of your module logic)
+    with c2:
+        marketing_file = st.file_uploader("Marketing Spend", type=["csv"])
+        festival_file = st.file_uploader("Festival Calendar", type=["csv"])
 
-def render_festival_calendar(f_name, f_date_str):
-    """Generates the interactive Heatmap for the Tuning Tab."""
-    f_date = datetime.strptime(f_date_str, "%Y-%m-%d")
-    year, month = f_date.year, f_date.month
-    cal_grid = calendar.monthcalendar(year, month)
-    
-    z_data, text_data = [], []
-    for week in cal_grid:
-        z_week, t_week = [], []
-        for day in week:
-            if day == 0:
-                z_week.append(0); t_week.append("")
-            else:
-                if day == f_date.day: z_week.append(2)      # Green (Peak)
-                elif abs(day - f_date.day) <= 2: z_week.append(1) # Orange (Window)
-                else: z_week.append(0.2)                    # Dark Grey (Normal)
-                t_week.append(str(day))
-        z_data.append(z_week); text_data.append(t_week)
+    with c3:
+        events_file = st.file_uploader("Events", type=["csv"])
 
-    fig = go.Figure(data=go.Heatmap(
-        z=z_data, 
-        x=['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
-        colorscale=[[0, "#1e1e1e"], [0.1, "#2d2d2d"], [0.5, "orange"], [1, "green"]],
-        showscale=False, xgap=3, ygap=3
-    ))
-    
-    for i, row in enumerate(text_data):
-        for j, val in enumerate(row):
-            fig.add_annotation(x=j, y=i, text=val, showarrow=False, font=dict(color="white"))
-            
-    fig.update_layout(
-        title=f"{f_name} Impact - {calendar.month_name[month]}", 
-        height=280, 
-        yaxis_autorange='reversed', 
-        template="plotly_dark",
-        margin=dict(l=10, r=10, t=40, b=10)
-    )
-    return fig
+    return {
+        "sales_file": sales_file,
+        "sku_master_file": sku_master_file,
+        "marketing_file": marketing_file,
+        "festival_file": festival_file,
+        "events_file": events_file
+    }
+
+
+def model_config_ui(df):
+
+    selected_sku = st.selectbox("Select SKU", df['sku'].unique())
+    model_choice = st.selectbox("Forecast Model",
+        ["Prophet", "Decision Tree", "KNN", "Moving Average"])
+
+    return {
+        "selected_sku": selected_sku,
+        "model_choice": model_choice
+    }
+
+
+def show_forecast_dashboard(df, config):
+
+    sku_df = df[df['sku'] == config['selected_sku']].sort_values('date')
+
+    forecast_df = run_forecast(config['model_choice'], sku_df, industry="Custom")
+
+    st.metric("Forecast Total", int(forecast_df['forecast'].sum()))
+    st.dataframe(forecast_df.head(20))
