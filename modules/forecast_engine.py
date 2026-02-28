@@ -19,15 +19,7 @@ def extend_future_dates(df, forecast_df, horizon=30):
     return forecast_df
 
 def run_forecast(model_choice, sku_df, industry):
+    forecast_df = model_output   # whatever model returns
+    forecast_df = extend_future_dates(sku_df, forecast_df)
 
-    if model_choice == "Moving Average":
-        return run_moving_avg(sku_df)
-
-    elif model_choice == "Decision Tree":
-        return run_decision_tree(sku_df)
-
-    elif model_choice == "KNN":
-        return run_knn(sku_df)
-
-    else:
-        return run_prophet(sku_df, industry=industry)
+    return forecast_df
