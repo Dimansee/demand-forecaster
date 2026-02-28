@@ -28,14 +28,39 @@ def analytics_section(df, config):
         (datetime.now()+timedelta(days=config['lead'])).strftime("%d %b"))
 
     # Chart
+    sku_df['smooth_sales'] = sku_df['sales'].rolling(7).mean()
+
     fig = go.Figure()
-    fig.add_trace(go.Scatter(x=sku_df['date'], y=sku_df['sales'], name="History"))
-    fig.add_trace(go.Scatter(x=forecast_df['date'], y=forecast_df['forecast'], name="Forecast"))
+
+    # Smoothed History
+    fig.add_trace(go.Scatter(
+        x=sku_df['date'],
+        y=sku_df['smooth_sales'],
+        name="Historical Trend",
+        line=dict(width=3)
+    ))
+
+    # Forecast
+    fig.add_trace(go.Scatter(
+        x=forecast_df['date'],
+        y=forecast_df['forecast'],
+        name="Forecast",
+        line=dict(width=4)
+    ))
+
+    # Forecast Start Marker
+    forecast_start = forecast_df['date'].min()
+
+    fig.add_vline(
+        x=forecast_start,
+        line_dash="dash",
+        annotation_text="Forecast Start"
+    )
+
+    fig.update_layout(
+        title="Demand Trend vs Forecast",
+        hovermode="x unified",
+        template="plotly_dark"
+    )
 
     st.plotly_chart(fig, use_container_width=True)
-
-    st.dataframe(forecast_df.head(20))
-
-    st.download_button("Download Forecast",
-        forecast_df.to_csv(index=False),
-        "forecast_output.csv")
