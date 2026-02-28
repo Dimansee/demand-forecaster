@@ -1,77 +1,89 @@
-# app.py
 import streamlit as st
+import pandas as pd
 from data_cleaning import auto_clean_sales_file, run_integrity_check
 from ui_components import show_static_documentation
 
-st.set_page_config(page_title="Pro Demand Planner v5.6", layout="wide")
+# --- PAGE SETUP ---
+st.set_page_config(page_title="Demand Engine", layout="wide")
 
-# Navigation Control
-if 'page' not in st.session_state: st.session_state.page = "Forecaster"
-pg = st.sidebar.radio("Navigation", ["Forecaster", "Documentation"])
+if 'page' not in st.session_state:
+    st.session_state.page = "Forecaster"
+
+pg = st.sidebar.radio("Navigation", ["Forecaster", "Documentation"], index=0)
 
 if pg == "Documentation":
-    show_static_documentation() #
+    show_static_documentation()
 else:
     st.title("📈 Demand Engine & Strategy Simulator")
-    tab_data, tab_engine, tab_viz = st.tabs(["📤 Data Sources", "🧠 Model Tuning", "📊 Analytics"])
+    tab_data, tab_engine, tab_viz = st.tabs(["📤 Data Sources", "🧠 Model Tuning", "📊 Forecast Analytics"])
 
     with tab_data:
-        st.subheader("1. Data Intake")
-        sales_f = st.file_uploader("Upload Sales History", type=["csv"])
-    
-        if sales_f:
-            # Step A: Clean the data
-            cleaned_sales = auto_clean_sales_file(sales_f)
+        # --- 1. DATA INTAKE SECTION ---
+        st.header("1. Data Intake")
         
-            # Step B: Display Integrity Check
-            st.divider()
-            st.subheader("🔍 Data Integrity Check")
-            health_reports = run_integrity_check(cleaned_sales, "Sales Data")
-            for report in health_reports:
-                if "✅" in report: st.success(report)
-                elif "⚠️" in report: st.warning(report)
-                else: st.info(report)
-            
-            # Step C: THE RE-CHECK OPTION (New Requirement)
-            st.divider()
-            st.subheader("2. Verify & Re-Check Cleaned Data")
-            st.info("Download the cleaned version below to verify how the AI has repaired your headers and dates.")
-        
-            # Convert cleaned dataframe to CSV for download
-            csv_buffer = cleaned_sales.to_csv(index=False).encode('utf-8')
-        
-            st.download_button(
-                label="📥 Download Cleaned Sales for Verification",
-                data=csv_buffer,
-                file_name="verified_cleaned_sales.csv",
-                mime="text/csv",
-                help="Click here to see the file after column renaming and daily aggregation."
-            )
-        
-            # Save to session state for other tabs
-            st.session_state['ready_data'] = cleaned_sales
+        # Grid for 5 Uploaders (3 in top row, 2 in bottom row to match screenshot)
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            sales_f = st.file_uploader("Sales History (Required)", type=["csv"], help="Upload historical sales data")
+        with col2:
+            mkt_f = st.file_uploader("Marketing Spend (Optional)", type=["csv"])
+        with col3:
+            event_f = st.file_uploader("Events / PR (Optional)", type=["csv"])
 
-        # --- COMPLETE DOWNLOAD TEMPLATES SECTION ---
+        col4, col5, _ = st.columns(3)
+        with col4:
+            master_f = st.file_uploader("SKU Master (Optional)", type=["csv"])
+        with col5:
+            fest_f = st.file_uploader("Festival Calendar (Optional)", type=["csv"])
+
         st.divider()
-        st.subheader("📥 Download All Templates")
+
+        # --- 2. DATA INTEGRITY CHECK SECTION ---
+        st.header("🔍 Data Integrity Check")
+        
+        # Status Badges Layout
+        b1, b2, b3, b4, b5 = st.columns(5)
+        
+        # Sales Status Logic
+        if sales_f:
+            cleaned_sales = auto_clean_sales_file(sales_f)
+            reports = run_integrity_check(cleaned_sales, "Sales")
+            b1.info("🟢 Sales Loaded")
+            
+            # Show specific integrity alerts immediately below
+            for r in reports:
+                if "⚠️" in r: st.warning(r)
+                elif "✅" in r: st.success(r)
+            
+            # --- VERIFICATION PREVIEW & DOWNLOAD ---
+            st.subheader("📋 Verification Preview")
+            st.dataframe(cleaned_sales.head(5), use_container_width=True)
+            
+            csv = cleaned_sales.to_csv(index=False).encode('utf-8')
+            st.download_button(
+                label="📥 Download Cleaned Sales for User Verification",
+                data=csv,
+                file_name="verified_cleaned_sales.csv",
+                mime="text/csv"
+            )
+            st.session_state['ready_data'] = cleaned_sales
+        else:
+            b1.error("🔴 Sales Required")
+
+        # Placeholders for other badges (matches your screenshot style)
+        b2.info("🔵 SKU Master\n(Optional)") if master_f else b2.dark_reference("SKU Master\nOptional")
+        b3.info("🔵 Marketing\n(Optional)") if mkt_f else b3.dark_reference("Marketing\nOptional")
+        b4.info("🔵 Festivals\n(Optional)") if fest_f else b4.dark_reference("Festivals\nOptional")
+        b5.info("🔵 Events\n(Optional)") if event_f else b5.dark_reference("Events\nOptional")
+
+        st.divider()
+
+        # --- 3. DOWNLOAD TEMPLATES SECTION ---
+        st.header("📥 Download Templates")
         t1, t2, t3, t4, t5 = st.columns(5)
         
-        t1.download_button("Sales Template", 
-            "date,sku,sales\n2026-01-01,SKU001,150\n2026-01-02,SKU001,120", "template_sales.csv")
-        
-        t2.download_button("Marketing Template", 
-            "date,spend,channel\n2026-01-01,5000,Social_Media", "template_marketing.csv")
-        
-        t3.download_button("SKU Master", 
-            "sku,category,unit_price,lead_time_days\nSKU001,Fashion,45.00,14", "template_sku_master.csv")
-        
-        t4.download_button("Festival Template", 
-            "date,festival_name,impact_score\n2026-11-08,Diwali,high", "template_festivals.csv")
-        
-        t5.download_button("Event Template", 
-            "date,event_type,description\n2026-05-15,Flash_Sale,50% Storewide", "template_events.csv")
-
-    with tab_engine:
-        st.write("Model Tuning configurations will appear here once data is verified.")
-
-
+        t1.download_button("Sales CSV", "date,sku,sales\n2026-01-01,SKU01,100", "sales_template.csv", use_container_width=True)
+        t2.download_button("Master CSV", "sku,category,price\nSKU01,Fashion,49.99", "master_template.csv", use_container_width=True)
+        t3.download_button("Marketing CSV", "date,spend\n2026-01-01,5000", "mkt_template.csv", use_container_width=True)
+        t4.download_button("Festival CSV", "date,festival\n2026-11-08,Diwali", "fest_template.csv", use_container_width=True)
+        t5.download_button("Events CSV", "date,event_name\n2026-05-15,Flash_Sale", "event_template.csv", use_container_width=True)
