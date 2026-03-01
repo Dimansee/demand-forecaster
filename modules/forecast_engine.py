@@ -6,31 +6,18 @@ from modules.forecast_models.prophet_model import run_prophet
 import pandas as pd
 from datetime import timedelta
 
-def seasonal_multiplier(date, business_type):
+def learn_seasonality(df):
 
-    month = date.month
+    df = df.copy()
+    df['month'] = df['date'].dt.month
 
-    if business_type == "FMCG":   # Sunscreen-like
-        if month in [3,4]:
-            return 1.4   # build-up
-        elif month in [5,6]:
-            return 1.8   # peak
-        elif month in [7,8]:
-            return 1.2   # taper
-        else:
-            return 0.8   # winter dip
+    monthly_avg = df.groupby('month')['sales'].mean()
 
-    if business_type == "Fashion":
-        if month in [4,5,10,11]:
-            return 1.5
-        return 1.0
+    overall_avg = monthly_avg.mean()
 
-    if business_type == "Electronics":
-        if month in [10,11]:
-            return 1.6
-        return 1.0
+    seasonality_index = monthly_avg / overall_avg
 
-    return 1.0
+    return seasonality_index.to_dict()
 
 def run_forecast(df, model_choice, business_type, config=None, forecast_days=30):
 
@@ -48,14 +35,15 @@ def run_forecast(df, model_choice, business_type, config=None, forecast_days=30)
 
     base = df["sales"].tail(14).mean()
 
+    season_index = learn_seasonality(df)
+
     forecast_vals = []
 
     for i, d in enumerate(future_dates):
-
         trend = base * (1 + trend_weight * (i/30))
-        season = seasonal_multiplier(d, business_type)
+        month_factor = season_indx.get(d.month,1)
+        forecast_vals.append(trend * month_factor)
 
-        forecast_vals.append(trend * season)
 
     return pd.DataFrame({
         "date": future_dates,
