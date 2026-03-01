@@ -17,16 +17,16 @@ def learn_seasonality(df, lookback_days=180):
     df = df.sort_values("date")
 
     recent_df = df[df['date'] >= df['date'].max() - pd.Timedelta(days=lookback_days)]
-
     recent_df['month'] = recent_df['date'].dt.month
 
     monthly_avg = recent_df.groupby('month')['sales'].mean()
-    overall_avg = monthly_avg.mean()
 
-    seasonality_index = monthly_avg / overall_avg
+    # Use lowest demand months as baseline instead of yearly mean
+    baseline = monthly_avg.nsmallest(3).mean()
+
+    seasonality_index = monthly_avg / baseline
 
     return seasonality_index.to_dict()
-
 
 # -------------------------------
 # 2. Detect Demand Phase
