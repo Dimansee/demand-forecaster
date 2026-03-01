@@ -96,9 +96,8 @@ def run_forecast(df, model_choice, business_type, config=None, forecast_days=30)
     )
 
     # --- Base Demand = weighted recent avg ---
-    recent = df.tail(30)['sales']
-    weights = np.linspace(1,2,len(recent))
-    base = np.average(recent, weights=weights)
+    recent = df.tail(60)['sales']
+    base = recent.median()
 
     # --- Learn seasonality ---
     season_index = learn_seasonality(df)
