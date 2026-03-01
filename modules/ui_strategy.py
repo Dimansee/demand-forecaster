@@ -4,6 +4,16 @@ import plotly.graph_objects as go
 import calendar
 import streamlit as st
 
+# ---------------- SAMPLE DATA ----------------
+# (Replace later with your actual dataset)
+@st.cache_data
+def load_data():
+    return pd.DataFrame({
+        "sku": ["SKU-1","SKU-2","SKU-3","SKU-4"]
+    })
+
+
+# ---------------- STRATEGY UI ----------------
 def strategy_section(df):
 
     st.subheader("1. Model & Strategy Selection")
@@ -17,6 +27,7 @@ def strategy_section(df):
         )
 
         selected_sku = st.selectbox("Select Target SKU", df['sku'].unique())
+        is_custom = business_type == "Custom"
 
     with col2:
         model_choice = st.selectbox(
@@ -54,6 +65,27 @@ def strategy_section(df):
     st.divider()
     st.subheader("Advanced model Controls")
 
+    # SAFE DEFAULTS
+    custom_trend = 1.0
+    custom_season = 1.0
+    custom_marketing = 1.0
+
+    if is_custom:
+
+        st.divider()
+        st.subheader("🎛 Custom Demand Behavior")
+
+        c1, c2, c3 = st.columns(3)
+
+        with c1:
+            custom_trend = st.slider("Trend Strength", 0.5, 2.0, 1.0)
+
+        with c2:
+            custom_season = st.slider("Seasonality Strength", 0.5, 2.0, 1.0)
+
+        with c3:
+            custom_marketing = st.slider("Marketing Sensitivity", 0.0, 2.0, 1.0)
+
     trend_weight = st.slider("Trend sensitivity", 0.01, 0.5, 0.05)
     marketing_weight = st.slider("Marketing Influence", 0.0, 2.0, 0.5)
 
@@ -86,30 +118,26 @@ def strategy_section(df):
             year, month = f_date.year, f_date.month
             cal_grid = calendar.monthcalendar(year, month)
 
-            z_data, text_data = [], []
+            z_data = []
 
             for week in cal_grid:
-                z_week, t_week = [], []
+                z_week = []
                 for day in week:
                     if day == 0:
                         z_week.append(0)
-                        t_week.append("")
                     else:
                         curr = datetime(year, month, day)
                         if curr == f_date:
-                            z_week.append(2)
+                            z_week.append(1)
                         elif curr in [
                             f_date - timedelta(days=2),
                             f_date - timedelta(days=1),
                             f_date + timedelta(days=1)
                         ]:
-                            z_week.append(1)
+                            z_week.append(0.6)
                         else:
                             z_week.append(0.2)
-                        t_week.append(str(day))
-
                 z_data.append(z_week)
-                text_data.append(t_week)
 
             fig = go.Figure(data=go.Heatmap(
                 z=z_data,
@@ -143,3 +171,23 @@ def strategy_section(df):
         "orange_lift": orange_lift,
         "forecast_days":forecast_days
     }
+
+
+# ---------------- MAIN APP ----------------
+def main():
+
+    st.set_page_config(layout="wide")
+    st.title("📦 Demand Strategy Simulator")
+
+    df = load_data()
+
+    config = strategy_section(df)
+
+    st.divider()
+    st.subheader("🔍 Selected Configuration")
+
+    st.json(config)
+
+
+if __name__ == "__main__":
+    main()
