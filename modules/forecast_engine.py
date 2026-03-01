@@ -6,37 +6,28 @@ from modules.forecast_models.prophet_model import run_prophet
 import pandas as pd
 from datetime import timedelta
 
-def run_forecast(df, model_choice, business_type, config=None):
+def seasonal_multiplier(date, business_type):
 
-    # -------- SAFE CONFIG --------
-    trend_weight = config.get("trend_weight", 0.05) if config else 0.05
-    marketing_weight = config.get("marketing_weight", 0.5) if config else 0.5
+    month = date.month
 
-    df = df.copy()
-    df = df.sort_values("date")
+    if business_type == "FMCG":   # Sunscreen-like
+        if month in [3,4]:
+            return 1.4   # build-up
+        elif month in [5,6]:
+            return 1.8   # peak
+        elif month in [7,8]:
+            return 1.2   # taper
+        else:
+            return 0.8   # winter dip
 
-    last_date = df["date"].max()
+    if business_type == "Fashion":
+        if month in [4,5,10,11]:
+            return 1.5
+        return 1.0
 
-    future_dates = pd.date_range(
-        start=last_date + timedelta(days=1),
-        periods=30,
-        freq="D"
-    )
+    if business_type == "Electronics":
+        if month in [10,11]:
+            return 1.6
+        return 1.0
 
-    avg_sales = df["sales"].tail(14).mean()
-
-    # -------- SIMPLE TREND --------
-    trend = avg_sales * (1 + trend_weight)
-
-    forecast_values = []
-
-    for i in range(len(future_dates)):
-        val = trend * (1 + (i/100))
-        forecast_values.append(val)
-
-    forecast_df = pd.DataFrame({
-        "date": future_dates,
-        "forecast": forecast_values
-    })
-
-    return forecast_df
+    return 1.0
