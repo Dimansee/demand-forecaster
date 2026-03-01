@@ -10,7 +10,8 @@ def analytics_section(df, config):
     forecast_df = run_forecast(
         sku_df,
         config['model_choice'],
-        config['business_type']
+        config['business_type'],
+        config
     )
 
     forecast_df['forecast'] *= config['surge']
