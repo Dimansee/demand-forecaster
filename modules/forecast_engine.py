@@ -19,8 +19,8 @@ def run_forecast(data, model_choice, business_type, config=None):
         forecast = run_prophet(
             data,
             industry=industry,
-            trend_weight=config.get("trend_weight",0.05),
-            marketing_weight=config.get("marketing_weight",0.5)
+            trend_weight = config.get("trend_weight",0.05) if config else 0.05
+            marketing_weight = config.get("marketing_weight",0.5) if config else 0.5
         )
 
     if forecast is None:
