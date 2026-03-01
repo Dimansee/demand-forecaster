@@ -11,7 +11,8 @@ def analytics_section(df, config):
         sku_df,
         config['model_choice'],
         config['business_type'],
-        config
+        config,
+        config.get("forecast_days",30)
     )
 
     forecast_df['forecast'] *= config['surge']
