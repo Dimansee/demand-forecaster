@@ -68,3 +68,22 @@ def data_section():
         "festival_file": festival_file,
         "events_file": events_file
     }
+
+    if sales_files:
+        from modules.data_cleaning import clean_all_data
+
+        df_preview = clean_all_data(
+            sales_file,
+            marketing_file,
+            festival_file,
+            events_file,
+            sku_master_file
+        )
+        st.divider()
+        st.subheader("🧹 Cleaned Data Preview")
+        st.dataframe(df_preview.head(10), use_container_width=True)
+        st.download_button(
+            "📥 Download Cleaned Data",
+            df_preview.to_csv(index=False),
+            "cleaned_data.csv"
+        )
