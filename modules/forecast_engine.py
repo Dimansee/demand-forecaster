@@ -41,7 +41,7 @@ def run_forecast(df, model_choice, business_type, config=None, forecast_days=30)
 
     for i, d in enumerate(future_dates):
         trend = base * (1 + trend_weight * (i/30))
-        month_factor = season_indx.get(d.month,1)
+        month_factor = season_index.get(d.month,1)
         forecast_vals.append(trend * month_factor)
 
 
