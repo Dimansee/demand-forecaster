@@ -121,6 +121,12 @@ def strategy_section(df):
 
             st.plotly_chart(fig, use_container_width=True)
 
+    forecast_days = st.selectbox(
+        "Forecast Horizon",
+        [30,60,90,180],
+        index = 0
+    )
+
     return {
         "business_type": business_type,
         "selected_sku": selected_sku,
