@@ -4,6 +4,7 @@ from modules.forecast_models.knn_model import run_knn
 from modules.forecast_models.prophet_model import run_prophet
 
 def run_forecast(data, model_choice, industry):
+    forecast = None
 
     if model_choice == "Moving Average":
         forecast = run_moving_avg(data)
@@ -16,6 +17,9 @@ def run_forecast(data, model_choice, industry):
 
     else:
         forecast = run_prophet(data, industry=industry)
+
+    if forecast is None:
+        raise ValueError("Forecast model failed")
 
     forecast['forecast'] = forecast['forecast'].clip(lower=0)
 
