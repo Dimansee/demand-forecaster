@@ -2,24 +2,21 @@ from modules.forecast_models.moving_avg import run_moving_avg
 from modules.forecast_models.decision_tree import run_decision_tree
 from modules.forecast_models.knn_model import run_knn
 from modules.forecast_models.prophet_model import run_prophet
-from datetime import timedelta
 
-def extend_future_dates(df, forecast_df, horizon=30):
+def run_forecast(data, model_choice, industry):
 
-    last_date = df['date'].max()
+    if model_choice == "Moving Average":
+        forecast = run_moving_avg(data)
 
-    future_dates = [
-        last_date + timedelta(days=i)
-        for i in range(1, horizon+1)
-    ]
+    elif model_choice == "Decision Tree":
+        forecast = run_decision_tree(data)
 
-    forecast_df = forecast_df.tail(horizon).copy()
-    forecast_df['date'] = future_dates
+    elif model_choice == "KNN":
+        forecast = run_knn(data)
 
-    return forecast_df
+    else:
+        forecast = run_prophet(data, industry=industry)
 
-def run_forecast(model_choice, sku_df, industry):
-    forecast_df = model_output   # whatever model returns
-    forecast_df = extend_future_dates(sku_df, forecast_df)
+    forecast['forecast'] = forecast['forecast'].clip(lower=0)
 
-    return forecast_df
+    return forecast
