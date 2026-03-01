@@ -9,8 +9,8 @@ def analytics_section(df, config):
     sku_df = df[df['sku'] == config['selected_sku']].sort_values('date')
 
     forecast_df = run_forecast(
-        config['model_choice'],
         sku_df,
+        config['model_choice'],
         config['business_type']
     )
 
