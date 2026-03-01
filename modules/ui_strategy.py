@@ -63,6 +63,16 @@ def strategy_section(df):
     }
 
     st.divider()
+    st.subheader("Advanced model Controls")
+
+    trend_weight = st.slider("Trend sesitivity", 0.01, 0.5, 0.05)
+    marketing weight = st.slider("Marketing Influence", 0.0, 2.0, 0.5)
+    return {
+        "trend_weight" : trend_weight,
+        "marketing_weight": marketing_weight
+    }
+    
+    st.divider()
     st.subheader("📅 Festival Impact Planning")
 
     fest_dict = {
