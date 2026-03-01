@@ -1,4 +1,3 @@
-
 import streamlit as st
 from modules.forecast_engine import run_forecast
 from datetime import datetime, timedelta
@@ -6,7 +5,7 @@ import plotly.graph_objects as go
 
 def analytics_section(df, config):
 
-    sku_df = df[df['sku'] == config['selected_sku']].sort_values('date')
+    sku_df = df[df['sku'] == config['selected_sku']].sort_values('date').copy()
 
     forecast_df = run_forecast(
         sku_df,
@@ -49,8 +48,8 @@ def analytics_section(df, config):
     ))
 
     for fest in config.get("festivals",[]):
-    #optional impact logic placeholder
-    forecast_df['forecast'] *= 1 + (config.get("green_lift",0)/100)
+        # optional impact logic placeholder
+        forecast_df['forecast'] *= 1 + (config.get("green_lift",0)/100)
 
     # Forecast Start Marker
     forecast_start = forecast_df['date'].min().to_pydatetime()
@@ -63,7 +62,7 @@ def analytics_section(df, config):
 
     fig.add_annotation(
         x=forecast_start,
-        y=max(forecast_df['forecast']),
+        y=forecast_df['forecast'].max() if not forecast_df.empty else 0,
         text="Forecast Start",
         showarrow=True,
         arrowhead=1
