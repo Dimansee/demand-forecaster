@@ -3,7 +3,7 @@ from modules.forecast_models.decision_tree import run_decision_tree
 from modules.forecast_models.knn_model import run_knn
 from modules.forecast_models.prophet_model import run_prophet
 
-def run_forecast(data, model_choice, industry):
+def run_forecast(data, model_choice, business_type, config=None):
     forecast = None
 
     if model_choice == "Moving Average":
