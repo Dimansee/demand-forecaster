@@ -11,41 +11,35 @@ import numpy as np
 # -------------------------------
 # 1. Learn RECENT Seasonality
 # -------------------------------
-def learn_seasonality(df, lookback_days=180):
-
+def learn_seasonality(df):
     df = df.copy()
-    df = df.sort_values("date")
-
-    recent_df = df[df['date'] >= df['date'].max() - pd.Timedelta(days=lookback_days)]
-    recent_df['month'] = recent_df['date'].dt.month
-
-    monthly_avg = recent_df.groupby('month')['sales'].mean()
-
-    # Use lowest demand months as baseline instead of yearly mean
-    baseline = monthly_avg.nsmallest(3).mean()
-
-    seasonality_index = monthly_avg / baseline
-
-    return seasonality_index.to_dict()
+    # Calculate the global mean of the entire dataset
+    global_mean = df['sales'].mean()
+    
+    # Monthly averages
+    monthly_avg = df.groupby(df['date'].dt.month)['sales'].mean()
+    
+    # Create an index: (Month Avg / Global Avg)
+    # If index > 1, it's a peak month. If < 1, it's off-season.
+    season_index = monthly_avg / global_mean
+    
+    return season_index.to_dict()
 
 # -------------------------------
 # 2. Detect Demand Phase
 # -------------------------------
 def detect_season_phase(df):
+    # EMA gives a smoother, more reliable trend line
+    ema_short = df['sales'].ewm(span=7).mean().iloc[-1]
+    ema_long = df['sales'].ewm(span=30).mean().iloc[-1]
+    
+    diff_pct = (ema_short - ema_long) / ema_long
 
-    last_60 = df.tail(60)['sales']
-
-    if len(last_60) < 20:
-        return "stable"
-
-    slope = last_60.diff().mean()
-
-    if slope > 0.5:
+    if diff_pct > 0.05: # 5% growth momentum
         return "ramp_up"
-    elif slope < -0.5:
+    elif diff_pct < -0.05:
         return "decline"
-    else:
-        return "stable"
+    return "stable"
 
 
 # -------------------------------
@@ -82,12 +76,22 @@ def smooth_seasonality(month_factor):
 # 5. Main Forecast Engine
 # -------------------------------
 def run_forecast(df, model_choice, business_type, config=None, forecast_days=30):
-
-    trend_weight = config.get("trend_weight",0.05) if config else 0.05
-
+    # 1. Configuration & Strategy Setup
+    config = config or {}
+    trend_weight = config.get("trend_weight", 0.05)
+    strategy = get_strategy_profile(business_type, config)
+    
     df = df.copy().sort_values("date")
-
     last_date = df["date"].max()
+    
+    # 2. Dynamic Baseline (Use 30-day median to ignore one-off outliers)
+    # This prevents a single high-sales day from bloating the entire forecast.
+    base_demand = df.tail(30)['sales'].median()
+
+    # 3. Agnostic Seasonality & Phase Detection
+    # These functions now look at statistical distribution, not specific months.
+    season_index = learn_seasonality(df)
+    phase = detect_season_phase(df)
 
     future_dates = pd.date_range(
         start=last_date + timedelta(days=1),
@@ -95,61 +99,51 @@ def run_forecast(df, model_choice, business_type, config=None, forecast_days=30)
         freq="D"
     )
 
-    # --- Base Demand = weighted recent avg ---
-    recent = df.tail(60)['sales']
-    base = recent.median()
-
-    # --- Learn seasonality ---
-    season_index = learn_seasonality(df)
-
-    # --- Detect phase ---
-    phase = detect_season_phase(df)
-
-    # --- Strategy ---
-    strategy = get_strategy_profile(business_type, config)
-
     forecast_vals = []
+    
+    # Historical Cap: Ensure we don't forecast something 2x higher than ever seen
+    historical_max = df['sales'].max()
 
     for i, d in enumerate(future_dates):
-
-        # ------------------------
-        # Phase-aware trend
-        # ------------------------
+        # --- A. Dampened Trend Calculation ---
+        # Instead of infinite growth, we apply a 'decay' to the trend
+        # so it stabilizes over time rather than spiking.
+        dampening = 0.7 
+        step_impact = (i + 1) / forecast_days
+        
         if phase == "ramp_up":
-            trend = base * (1 + trend_weight * strategy["trend_boost"] * (i/20))
-
+            # Linear growth based on trend weight and strategy boost
+            trend_mod = 1 + (trend_weight * strategy["trend_boost"] * step_impact * dampening)
         elif phase == "decline":
-            trend = base * (1 - trend_weight * strategy["trend_boost"] * (i/25))
+            trend_mod = 1 - (trend_weight * strategy["trend_boost"] * step_impact * dampening)
+        else:
+            trend_mod = 1.0
 
-        else:  # stable
-            trend = base
+        # --- B. Agnostic Seasonality ---
+        # Get the multiplier for this month. If no data exists, default to 1.0.
+        m_factor = season_index.get(d.month, 1.0)
+        
+        # Smooth the impact of the strategy's seasonal boost
+        # (prevents doubling the demand accidentally)
+        strat_season_impact = 1 + ((strategy["season_boost"] - 1) * 0.5)
+        
+        # --- C. Final Assembly ---
+        # Formula: Base * Trend * (Historical Seasonality * Strategy Overlay)
+        forecast = base_demand * trend_mod * m_factor * strat_season_impact
+        
+        # Apply Marketing Boost as a final multiplier
+        forecast *= strategy.get("marketing_boost", 1.0)
 
-        # ------------------------
-        # Seasonality
-        # ------------------------
-        month_factor = season_index.get(d.month, 1)
-        month_factor = smooth_seasonality(month_factor)
-        month_factor *= strategy["season_boost"]
-
-        # --- Seasonal proximity lift ---
-        peak_months = [4,5,6]  # sunscreen peak
-        proximity_lift = 1
-
-        months_to_peak = min([abs(d.month - m) for m in peak_months])
-
-        if months_to_peak == 1:
-            proximity_lift = 1.05   # early ramp (March)
-        elif months_to_peak == 2:
-            proximity_lift = 1.02   # pre-ramp (Feb)
-
-        month_factor *= proximity_lift
-
-        forecast = trend * month_factor
-
-        forecast_vals.append(max(forecast,0))  # prevent negative demand
-
+        # --- D. Sanity Guards ---
+        # 1. No negative demand.
+        # 2. Cap at 150% of historical max to prevent "algorithmic hallucinations."
+        final_val = max(forecast, 0)
+        final_val = min(final_val, historical_max * 1.5)
+        
+        forecast_vals.append(final_val)
 
     return pd.DataFrame({
         "date": future_dates,
         "forecast": forecast_vals
     })
+
