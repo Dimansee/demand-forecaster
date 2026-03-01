@@ -1,98 +1,91 @@
 import pandas as pd
 import numpy as np
 from datetime import timedelta
-from sklearn.ensemble import GradientBoostingRegressor
 
-# --- MODULE 1: Pattern Learning (The DNA) ---
+# --- 1. Pattern Learning (Business DNA) ---
 def learn_business_dna(df):
-    """Extracts high-precision seasonality and time-decayed weights."""
+    """Extracts seasonality with Time-Decay (Recent data = Higher Weight)."""
     df = df.copy()
-    # Time-Decay: Recent data is 2x more important than old data
+    
+    # Create weights: newer dates are up to 2x more influential than old ones
     weights = np.linspace(0.5, 1.0, len(df))
     global_mean = np.average(df['sales'], weights=weights)
     
-    # Weekly patterns (Mon-Sun)
-    dow_map = (df.groupby(df['date'].dt.dayofweek)['sales'].mean() / global_mean).to_dbict()
+    # Weekly patterns (Mon-Sun) - Fixed the .to_dict() typo here
+    dow_map = (df.groupby(df['date'].dt.dayofweek)['sales'].mean() / global_mean).to_dict()
+    
     # Monthly patterns (Jan-Dec)
     month_map = (df.groupby(df['date'].dt.month)['sales'].mean() / global_mean).to_dict()
     
     return dow_map, month_map
 
-# --- MODULE 2: Gradient Boosting (New Module) ---
-def run_gradient_boosting(df, forecast_days):
-    """Learns non-linear residuals to fix errors other models miss."""
-    df = df.copy()
-    df['day_of_year'] = df['date'].dt.dayofyear
-    df['day_of_week'] = df['date'].dt.dayofweek
+# --- 2. Event & Holiday Intelligence ---
+def get_event_multiplier(date):
+    """Calculates 'Halo Effect' (Demand increases as we get closer to a holiday)."""
+    # Key global events
+    events = {
+        "Christmas": (12, 25),
+        "Black Friday Window": (11, 25), # Simplified proxy
+        "Summer Peak": (7, 15)
+    }
     
-    X = df[['day_of_year', 'day_of_week']]
-    y = df['sales']
-    
-    model = GradientBoostingRegressor(n_estimators=100, learning_rate=0.1, max_depth=3)
-    model.fit(X, y)
-    
-    last_date = df['date'].max()
-    future_dates = pd.date_range(start=last_date + timedelta(days=1), periods=forecast_days)
-    X_future = pd.DataFrame({
-        'day_of_year': future_dates.dayofyear,
-        'day_of_week': future_dates.dayofweek
-    })
-    
-    return model.predict(X_future)
-
-# --- MODULE 3: Event & Holiday Overlay ---
-def get_advanced_event_boost(date):
-    """Gaussian-style ramp up for major festivals."""
-    # Example: Christmas peak
-    christmas = pd.Timestamp(date.year, 12, 25)
-    days_to = (date - christmas).days
-    
-    if -14 <= days_to <= 0: # 14-day shopping ramp-up
-        return 1.0 + (0.4 * (1 + days_to / 14))
-    
-    # Black Friday Window
-    if date.month == 11 and 20 <= date.day <= 30:
-        return 1.35
+    max_boost = 1.0
+    for event_name, (m, d) in events.items():
+        event_date = pd.Timestamp(date.year, m, d)
+        days_diff = (date - event_date).days
         
-    return 1.0
+        # If we are in the 14 days LEADING UP to the event
+        if -14 <= days_diff <= 0:
+            # Gaussian-style ramp up: boost grows as days_diff approaches 0
+            proximity_boost = 1 + (0.4 * (1 + days_diff / 14))
+            max_boost = max(max_boost, proximity_boost)
+            
+    return max_boost
 
-# --- MAIN ENGINE ---
+# --- 3. Strategy Profiles ---
+def get_strategy_profile(business_type):
+    profiles = {
+        "FMCG": {"marketing": 1.1},
+        "Fashion": {"marketing": 1.3},
+        "Electronics": {"marketing": 1.05},
+        "Seasonal": {"marketing": 1.5}
+    }
+    return profiles.get(business_type, {"marketing": 1.0})
+
+# --- 4. Main Engine ---
 def run_forecast(df, model_choice, business_type, config=None, forecast_days=30):
     config = config or {}
     df = df.copy().sort_values("date")
     
-    # 1. CLEANING: Remove outliers that skew 'learning'
+    # Pre-process: Clean outliers (Clips top 2% of extreme spikes)
     df['sales'] = df['sales'].clip(upper=df['sales'].quantile(0.98))
     
-    # 2. ANALYSIS: Learn the DNA and Momentum
+    # Analysis
     dow_map, month_map = learn_business_dna(df)
-    base_demand = df['sales'].ewm(span=14).mean().iloc[-1] # Exponential baseline
+    strategy = get_strategy_profile(business_type)
     
-    # 3. GENERATE FUTURE DATES
+    # Baseline: Use Exponential Moving Average (reacts better to recent trends)
+    base_demand = df['sales'].ewm(span=14).mean().iloc[-1]
+    
     last_date = df["date"].max()
     future_dates = pd.date_range(start=last_date + timedelta(days=1), periods=forecast_days)
     
-    # 4. MODULE SELECTION
-    if model_choice == "Gradient Boosting":
-        core_forecast = run_gradient_boosting(df, forecast_days)
-    else:
-        # Fallback to pattern-based logic for other types
-        core_forecast = [base_demand] * forecast_days
-
     forecast_vals = []
-    for i, d in enumerate(future_dates):
-        # Apply DNA factors
-        val = core_forecast[i] if model_choice == "Gradient Boosting" else base_demand
-        val *= dow_map.get(d.dayofweek, 1.0)
-        val *= month_map.get(d.month, 1.0)
+    hist_max = df['sales'].max()
+
+    for d in future_dates:
+        # A. Start with base and apply DNA (Weekly + Monthly)
+        val = base_demand * dow_map.get(d.dayofweek, 1.0) * month_map.get(d.month, 1.0)
         
-        # Apply Festival/Event Overlay
-        val *= get_advanced_event_boost(d)
+        # B. Apply Holiday/Event Ramps
+        val *= get_event_multiplier(d)
         
-        # Strategy Overlay
-        strat = {"FMCG": 1.1, "Fashion": 1.3, "Electronics": 1.05}.get(business_type, 1.0)
-        val *= strat
+        # C. Apply Strategy & Config Boosts
+        val *= strategy["marketing"]
+        val *= config.get("custom_marketing", 1.0)
         
-        forecast_vals.append(max(val, 0))
+        # D. Safety Guards
+        final_val = min(max(val, 0), hist_max * 1.6) # Cap at 160% of hist max
+        forecast_vals.append(final_val)
 
     return pd.DataFrame({"date": future_dates, "forecast": forecast_vals})
