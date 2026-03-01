@@ -61,15 +61,9 @@ def data_section():
     t_cols[4].download_button("Events CSV",
         "date,event_flag\n2026-06-01,1", "events_template.csv")
 
-    return {
-        "sales_file": sales_file,
-        "sku_master_file": sku_master_file,
-        "marketing_file": marketing_file,
-        "festival_file": festival_file,
-        "events_file": events_file
-    }
+    # ---------- CLEAN + PREVIEW ----------
+    if sales_file:
 
-    if sales_files:
         from modules.data_cleaning import clean_all_data
 
         df_preview = clean_all_data(
@@ -79,11 +73,21 @@ def data_section():
             events_file,
             sku_master_file
         )
+
         st.divider()
         st.subheader("🧹 Cleaned Data Preview")
         st.dataframe(df_preview.head(10), use_container_width=True)
+
         st.download_button(
             "📥 Download Cleaned Data",
             df_preview.to_csv(index=False),
             "cleaned_data.csv"
         )
+
+    return {
+        "sales_file": sales_file,
+        "sku_master_file": sku_master_file,
+        "marketing_file": marketing_file,
+        "festival_file": festival_file,
+        "events_file": events_file
+    }
