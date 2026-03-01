@@ -51,27 +51,12 @@ def strategy_section(df):
         with col3:
             d_marketing = st.number_input("Marketing Lift %",0,500,0)
 
-    return {
-        "business_type": business_type,
-        "selected_sku": selected_sku,
-        "model_choice": model_choice,
-        "returns": d_returns,
-        "buffer": d_buffer,
-        "surge": d_surge,
-        "marketing": d_marketing,
-        "lead": d_lead
-    }
-
     st.divider()
     st.subheader("Advanced model Controls")
 
-    trend_weight = st.slider("Trend sesitivity", 0.01, 0.5, 0.05)
-    marketing weight = st.slider("Marketing Influence", 0.0, 2.0, 0.5)
-    return {
-        "trend_weight" : trend_weight,
-        "marketing_weight": marketing_weight
-    }
-    
+    trend_weight = st.slider("Trend sensitivity", 0.01, 0.5, 0.05)
+    marketing_weight = st.slider("Marketing Influence", 0.0, 2.0, 0.5)
+
     st.divider()
     st.subheader("📅 Festival Impact Planning")
 
@@ -145,6 +130,8 @@ def strategy_section(df):
         "surge": d_surge,
         "marketing": d_marketing,
         "lead": d_lead,
+        "trend_weight": trend_weight,
+        "marketing_weight": marketing_weight,
         "festivals": selected_fests,
         "green_lift": green_lift,
         "orange_lift": orange_lift
