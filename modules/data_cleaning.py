@@ -1,142 +1,110 @@
 import pandas as pd
 import streamlit as st
-import io
+
+# ---------- SAFE CSV READER (Fix for Streamlit Upload Crash) ----------
+def safe_read_csv(file):
+    if file is None:
+        return None
+
+    try:
+        if file.size == 0:
+            st.error("❌ Uploaded file is empty")
+            st.stop()
+
+        file.seek(0)   # 🔑 rewind file pointer before reading
+        return pd.read_csv(file)
+
+    except Exception as e:
+        st.error(f"❌ Failed to read file: {e}")
+        st.stop()
 
 
-# ---------------- SAFE DATE PARSER ----------------
+# ---------- SAFE DATE PARSER ----------
 def safe_date_parse(df, col):
 
     if col not in df.columns:
         st.error(f"❌ Missing required column: {col}")
         st.stop()
 
+    df = df.copy()
+
     df[col] = pd.to_datetime(
         df[col],
-        errors='coerce',     # avoids crash
-        dayfirst=True        # supports Indian format
+        errors='coerce',
+        dayfirst=True
     )
 
     if df[col].isna().sum() > 0:
-        st.warning(f"⚠️ Some invalid dates in '{col}' were removed.")
+        st.warning(f"⚠️ Some invalid dates found in {col}. They were auto-cleaned.")
 
     df = df.dropna(subset=[col])
 
     return df
 
 
-# ---------------- SAFE CSV READER ----------------
-def safe_read_csv(uploaded_file, file_label="File"):
-
-    try:
-        if uploaded_file is None:
-            return None
-
-        # Convert binary upload → readable string
-        stringio = io.StringIO(uploaded_file.getvalue().decode("utf-8"))
-        df = pd.read_csv(stringio)
-
-        if df.empty:
-            st.warning(f"⚠️ {file_label} is empty — skipped")
-            return None
-
-        return df
-
-    except Exception as e:
-        st.warning(f"⚠️ {file_label} unreadable — skipped")
-        return None
-
-
-# ---------------- MAIN CLEANING FUNCTION ----------------
+# ---------- MAIN CLEAN FUNCTION ----------
 def clean_all_data(
-        sales_file,
-        marketing_file=None,
-        festival_file=None,
-        events_file=None,
-        sku_master_file=None
-    ):
+    sales_file,
+    marketing_file=None,
+    festival_file=None,
+    events_file=None,
+    sku_master_file=None
+):
 
-    # ---------- SALES (REQUIRED) ----------
-    sales = safe_read_csv(sales_file, "Sales File")
-
-    if sales is None:
-        st.error("❌ Sales file is required and must not be empty.")
+    # ---------------- SALES ----------------
+    if sales_file is None:
+        st.error("❌ Sales file is required")
         st.stop()
 
-    required_cols = {'date', 'sku', 'sales'}
+    sales = safe_read_csv(sales_file)
 
-    if not required_cols.issubset(sales.columns):
+    if 'date' not in sales.columns or 'sku' not in sales.columns or 'sales' not in sales.columns:
         st.error("Sales file must contain: date, sku, sales")
         st.stop()
 
     sales = safe_date_parse(sales, 'date')
-    sales = sales[sales['sales'] >= 0]
 
-    st.success("✅ Sales history loaded")
+    dfs = [sales]
 
-    df = sales.copy()
-
-
-    # ---------- SKU MASTER ----------
-    sku_master = safe_read_csv(sku_master_file, "SKU Master")
-
-    if sku_master is not None:
-        if 'sku' in sku_master.columns:
-            df = df.merge(sku_master, on='sku', how='left')
-            st.success("✅ SKU Master integrated")
-        else:
-            st.warning("⚠️ SKU Master missing 'sku' column — skipped")
-
-
-    # ---------- MARKETING ----------
-    marketing = safe_read_csv(marketing_file, "Marketing")
-
-    if marketing is not None:
+    # ---------------- MARKETING ----------------
+    if marketing_file is not None:
+        marketing = safe_read_csv(marketing_file)
         if 'date' in marketing.columns:
             marketing = safe_date_parse(marketing, 'date')
+        dfs.append(marketing)
 
-        merge_cols = list(set(['date', 'sku']).intersection(marketing.columns))
+    # ---------------- FESTIVALS ----------------
+    if festival_file is not None:
+        fest = safe_read_csv(festival_file)
+        if 'date' in fest.columns:
+            fest = safe_date_parse(fest, 'date')
+        dfs.append(fest)
 
-        if merge_cols:
-            df = df.merge(marketing, on=merge_cols, how='left')
-            st.success("✅ Marketing linked")
-
-
-    # ---------- FESTIVAL ----------
-    festival = safe_read_csv(festival_file, "Festival")
-
-    if festival is not None:
-        if 'date' in festival.columns:
-            festival = safe_date_parse(festival, 'date')
-
-        if 'date' in festival.columns:
-            df = df.merge(festival, on='date', how='left')
-            st.success("✅ Festival synced")
-
-
-    # ---------- EVENTS ----------
-    events = safe_read_csv(events_file, "Events")
-
-    if events is not None:
+    # ---------------- EVENTS ----------------
+    if events_file is not None:
+        events = safe_read_csv(events_file)
         if 'date' in events.columns:
             events = safe_date_parse(events, 'date')
+        dfs.append(events)
 
-        if 'date' in events.columns:
-            df = df.merge(events, on='date', how='left')
-            st.success("✅ Events synced")
+    # ---------------- SKU MASTER ----------------
+    if sku_master_file is not None:
+        sku_master = safe_read_csv(sku_master_file)
+        dfs.append(sku_master)
 
+    # ---------------- MERGE ----------------
+    df = sales.copy()
 
-    # ---------- FILL NULLS ----------
-    for col in ['marketing_spend', 'festival_flag', 'event_flag']:
-        if col not in df.columns:
-            df[col] = 0
-        else:
-            df[col] = df[col].fillna(0)
+    for extra in dfs[1:]:
 
+        common_cols = list(set(['date', 'sku']).intersection(extra.columns))
 
-    # ---------- FEATURE ENGINEERING ----------
-    df['month'] = df['date'].dt.month
-    df['day_of_week'] = df['date'].dt.dayofweek
-    df['is_weekend'] = df['day_of_week'].apply(lambda x: 1 if x >= 5 else 0)
+        if len(common_cols) >= 1:
+
+            duplicate_cols = [col for col in extra.columns if col in df.columns and col not in common_cols]
+            extra = extra.drop(columns=duplicate_cols)
+
+            df = df.merge(extra, on=common_cols, how='left')
 
     df.fillna(0, inplace=True)
 
