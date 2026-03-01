@@ -131,6 +131,19 @@ def run_forecast(df, model_choice, business_type, config=None, forecast_days=30)
         month_factor = smooth_seasonality(month_factor)
         month_factor *= strategy["season_boost"]
 
+        # --- Seasonal proximity lift ---
+        peak_months = [4,5,6]  # sunscreen peak
+        proximity_lift = 1
+
+        months_to_peak = min([abs(d.month - m) for m in peak_months])
+
+        if months_to_peak == 1:
+            proximity_lift = 1.05   # early ramp (March)
+        elif months_to_peak == 2:
+            proximity_lift = 1.02   # pre-ramp (Feb)
+
+        month_factor *= proximity_lift
+
         forecast = trend * month_factor
 
         forecast_vals.append(max(forecast,0))  # prevent negative demand
