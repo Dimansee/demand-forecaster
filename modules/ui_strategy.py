@@ -140,5 +140,6 @@ def strategy_section(df):
         "marketing_weight": marketing_weight,
         "festivals": selected_fests,
         "green_lift": green_lift,
-        "orange_lift": orange_lift
+        "orange_lift": orange_lift,
+        "forecast_days":forecast_days
     }
