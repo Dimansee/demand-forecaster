@@ -48,6 +48,10 @@ def analytics_section(df, config):
         line=dict(width=4)
     ))
 
+    fore fest in config.get("festivals",[]):
+    #optional impact logic placeholder
+    fprecast_df['forecast'] *= 1 + (config.get("green_lift",0)/100)
+
     # Forecast Start Marker
     forecast_start = forecast_df['date'].min().to_pydatetime()
 
