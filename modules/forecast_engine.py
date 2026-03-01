@@ -19,42 +19,27 @@ def learn_seasonality(df):
 
     return seasonality_index.to_dict()
 
-def get_strategy_profile(business_type):
+
+def get_strategy_profile(business_type, config=None):
+
+    if business_type == "Custom" and config:
+
+        return {
+            "trend_boost": config.get("custom_trend",1.0),
+            "season_boost": config.get("custom_season",1.0),
+            "marketing_boost": config.get("custom_marketing",1.0)
+        }
 
     profiles = {
 
-        "FMCG": {
-            "trend_boost": 0.8,
-            "season_boost": 1.1,
-            "marketing_boost": 1.3
-        },
-
-        "Fashion": {
-            "trend_boost": 1.2,
-            "season_boost": 1.4,
-            "marketing_boost": 1.0
-        },
-
-        "Electronics": {
-            "trend_boost": 1.3,
-            "season_boost": 1.1,
-            "marketing_boost": 0.8
-        },
-
-        "Seasonal": {
-            "trend_boost": 1.0,
-            "season_boost": 1.6,
-            "marketing_boost": 0.9
-        },
-
-        "Custom": {
-            "trend_boost": 1.0,
-            "season_boost": 1.0,
-            "marketing_boost": 1.0
-        }
+        "FMCG": {"trend_boost":0.8,"season_boost":1.1,"marketing_boost":1.3},
+        "Fashion": {"trend_boost":1.2,"season_boost":1.4,"marketing_boost":1.0},
+        "Electronics": {"trend_boost":1.3,"season_boost":1.1,"marketing_boost":0.8},
+        "Seasonal": {"trend_boost":1.0,"season_boost":1.6,"marketing_boost":0.9}
     }
 
-    return profiles.get(business_type, profiles["Custom"])
+    return profiles.get(business_type, {"trend_boost":1,"season_boost":1,"marketing_boost":1})
+
 
 def run_forecast(df, model_choice, business_type, config=None, forecast_days=30):
 
@@ -73,7 +58,7 @@ def run_forecast(df, model_choice, business_type, config=None, forecast_days=30)
     base = df["sales"].tail(14).mean()
 
     season_index = learn_seasonality(df)
-    strategy = get_strategy_profile(business_type)
+    strategy = get_strategy_profile(business_type, config)
 
     forecast_vals = []
 
