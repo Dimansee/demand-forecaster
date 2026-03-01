@@ -31,3 +31,33 @@ def seasonal_multiplier(date, business_type):
         return 1.0
 
     return 1.0
+
+def run_forecast(df, model_choice, business_type, config=None, forecast_days=30):
+
+    trend_weight = config.get("trend_weight",0.05) if config else 0.05
+
+    df = df.copy().sort_values("date")
+
+    last_date = df["date"].max()
+
+    future_dates = pd.date_range(
+        start=last_date + timedelta(days=1),
+        periods=forecast_days,
+        freq="D"
+    )
+
+    base = df["sales"].tail(14).mean()
+
+    forecast_vals = []
+
+    for i, d in enumerate(future_dates):
+
+        trend = base * (1 + trend_weight * (i/30))
+        season = seasonal_multiplier(d, business_type)
+
+        forecast_vals.append(trend * season)
+
+    return pd.DataFrame({
+        "date": future_dates,
+        "forecast": forecast_vals
+    })
