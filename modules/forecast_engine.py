@@ -3,29 +3,40 @@ from modules.forecast_models.decision_tree import run_decision_tree
 from modules.forecast_models.knn_model import run_knn
 from modules.forecast_models.prophet_model import run_prophet
 
-def run_forecast(data, model_choice, business_type, config=None):
-    forecast = None
+import pandas as pd
+from datetime import timedelta
 
-    if model_choice == "Moving Average":
-        forecast = run_moving_avg(data)
+def run_forecast(df, model_choice, business_type, config=None):
 
-    elif model_choice == "Decision Tree":
-        forecast = run_decision_tree(data)
+    # -------- SAFE CONFIG --------
+    trend_weight = config.get("trend_weight", 0.05) if config else 0.05
+    marketing_weight = config.get("marketing_weight", 0.5) if config else 0.5
 
-    elif model_choice == "KNN":
-        forecast = run_knn(data)
+    df = df.copy()
+    df = df.sort_values("date")
 
-    else:
-        forecast = run_prophet(
-            data,
-            industry=industry,
-            trend_weight = config.get("trend_weight",0.05) if config else 0.05
-            marketing_weight = config.get("marketing_weight",0.5) if config else 0.5
-        )
+    last_date = df["date"].max()
 
-    if forecast is None:
-        raise ValueError("Forecast model failed")
+    future_dates = pd.date_range(
+        start=last_date + timedelta(days=1),
+        periods=30,
+        freq="D"
+    )
 
-    forecast['forecast'] = forecast['forecast'].clip(lower=0)
+    avg_sales = df["sales"].tail(14).mean()
 
-    return forecast
+    # -------- SIMPLE TREND --------
+    trend = avg_sales * (1 + trend_weight)
+
+    forecast_values = []
+
+    for i in range(len(future_dates)):
+        val = trend * (1 + (i/100))
+        forecast_values.append(val)
+
+    forecast_df = pd.DataFrame({
+        "date": future_dates,
+        "forecast": forecast_values
+    })
+
+    return forecast_df
