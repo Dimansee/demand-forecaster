@@ -30,7 +30,21 @@ def clean_all_data(sales_file, marketing_file=None, festival_file=None, events_f
         st.error("❌ Sales file is required")
         st.stop()
 
-    sales = pd.read_csv(sales_file)
+    try:
+        sales_file.seek(0)   # Reset file pointer (important for cloud)
+        sales = pd.read_csv(sales_file)
+
+        if sales.empty:
+            st.error("Uploaded Sales file is empty")
+            st.stop()
+
+    except pd.errors.EmptyDataError:
+        st.error("Sales file is empty or corrupted")
+        st.stop()
+
+    except Exception as e:
+        st.error(f"Unable to read Sales file: {e}")
+        st.stop()
 
     if 'date' not in sales.columns or 'sku' not in sales.columns or 'sales' not in sales.columns:
         st.error("Sales file must contain: date, sku, sales")
@@ -42,21 +56,36 @@ def clean_all_data(sales_file, marketing_file=None, festival_file=None, events_f
 
     # ---------------- MARKETING ----------------
     if marketing_file is not None:
-        marketing = pd.read_csv(marketing_file)
+        try:
+            marketing_file.seek(0)
+            marketing = pd.read_csv(marketing_file)
+        except:
+            st.warning("⚠️ Marketing file unreadable — skipped")
+            marketing = None
         if 'date' in marketing.columns:
             marketing = safe_date_parse(marketing, 'date')
         dfs.append(marketing)
 
     # ---------------- FESTIVALS ----------------
     if festival_file is not None:
-        fest = pd.read_csv(festival_file)
+        try:
+            festival_file.seek(0)
+            fest = pd.read_csv(festival_file)
+        except:
+            st.warning("⚠️ Festival file unreadable — skipped")
+            fest = None
         if 'date' in fest.columns:
             fest = safe_date_parse(fest, 'date')
         dfs.append(fest)
 
     # ---------------- EVENTS ----------------
     if events_file is not None:
-        events = pd.read_csv(events_file)
+        try:
+            events_file.seek(0)
+            events = pd.read_csv(events_file)
+        except:
+            st.warning("⚠️ Events file unreadable — skipped")
+            events = None
         if 'date' in events.columns:
             events = safe_date_parse(events, 'date')
         dfs.append(events)
